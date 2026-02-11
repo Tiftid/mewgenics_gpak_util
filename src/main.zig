@@ -2,6 +2,7 @@
 //! Dump a Mewgenics .gpak file to a directory of real files.
 
 const std = @import("std");
+const options = @import("options");
 
 pub fn main(init: std.process.Init) !void {
     const gpa = init.gpa;
@@ -153,7 +154,7 @@ pub fn main(init: std.process.Init) !void {
 pub fn usage() void {
 	std.debug.print(
 		\\==============================================
-		\\MEWGENICS GPAK UTIL
+		\\MEWGENICS GPAK UTIL {f}
 		\\By Tiftid
 		\\==============================================
 		\\Usage:
@@ -162,7 +163,7 @@ pub fn usage() void {
 		\\Only supports unpacking gpak files currently, but in future I hope 
 		\\to support packing a directory into a gpak file for the purposes of modding.
 		, .{
-			
+			options.version,
 		},
 	);
 }

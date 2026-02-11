@@ -1,8 +1,20 @@
 const std = @import("std");
 
+const zon = @import("build.zig.zon");
+
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
+	
+	// Make the build.zig.zon semantic version available to the executable as an import.
+	const options = b.addOptions();
+	options.addOption(
+		std.SemanticVersion,
+		"version",
+		comptime std.SemanticVersion.parse(zon.version) catch @compileError(
+			"Failed to parse semantic version from build.zig.zon"
+		),
+	);
 	
     const exe = b.addExecutable(.{
         .name = "mewgenics_gpak_util",
@@ -10,7 +22,9 @@ pub fn build(b: *std.Build) void {
             .root_source_file = b.path("src/main.zig"),
             .target = target,
             .optimize = optimize,
-            .imports = &.{},
+            .imports = &.{
+				.{.name = "options", .module = options.createModule()},
+			},
         }),
     });
 	
