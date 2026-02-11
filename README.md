@@ -3,7 +3,7 @@ Command-line utility primarily intended for unpacking Mewgenics (2026)'s resourc
 Written in [Zig](https://ziglang.org).
 
 ## About Mewgenics and GPAK
-If you own Mewgenics on Steam, you might notice that it only has three files: Mewgenics.exe, resources.gpak and steam_api64.dll.
+If you own [Mewgenics on Steam](https://store.steampowered.com/app/686060/Mewgenics/), you might notice that it only has three files: Mewgenics.exe, resources.gpak and steam_api64.dll.
 This kind of thing is advantageous for game development; store all your assets in one big bundle, so you only have to make one filesystem call to have access to all of them.
 
 The .gpak file format is particularly simple:
@@ -21,3 +21,7 @@ If you don't pass in an output directory, it'll just spit the unpacked files int
 Right now, it only supports unpacking GPAK files, but in future I might make it so that the first argument is a "mode", and support packing GPAK files from a source directory.
 
 That is, if I can tear myself away from the game long enough!
+
+## Some fun things in the extracted files
+- The game's graphics are primarily .swf files, meaning that [Edmund](https://en.wikipedia.org/wiki/Edmund_McMillen) is still a Flash chad in 2026
+- That song where they go "cat fight cat fight" lives at audio/music/tutorial/katfight_boss.ogg
