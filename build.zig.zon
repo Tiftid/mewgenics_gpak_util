@@ -1,6 +1,6 @@
 .{
     .name = .mewgenics_gpak_util,
-    .version = "0.0.1",
+    .version = "0.0.2",
     .fingerprint = 0x544bfb3980099345, // Changing this has security and trust implications.
     .minimum_zig_version = "0.16.0-dev.2510+bcb5218a2",
     .dependencies = .{
