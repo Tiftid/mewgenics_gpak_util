@@ -21,7 +21,7 @@ This makes it a relatively compact way to encode a large archive of files, and a
 ## Future plans
 I intend to add a "patch" mode, where you provide the following things:
 - The path to an existing gpak file to patch
-- A [ZON]https://ziglang.org/documentation/master/std/#std.zon file describing how to patch the gpak
+- A [ZON](https://ziglang.org/documentation/master/std/#std.zon) file describing how to patch the gpak
 - The path to a directory containing the files to patch in (including the ZON file; it won't be a separate argument)
 - The ZON file will probably be laid out as follows:
   - The root of the file will be a struct with three fields; "remove", "add" and "override"
