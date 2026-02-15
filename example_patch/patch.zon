@@ -1,0 +1,12 @@
+.{
+	.version = "0.0.1", // Patch file format version
+	.add = .{ // Files from the patch folder to add to the gpak
+		"audio/music/doinya.ogg",
+	},
+	.remove = .{ // Files from the gpak to completely remove
+		"audio/music/titlescreen/titlescreen.ogg",
+	},
+	.override = .{ // Files from the gpak to replace with the patch folder's version
+		"audio/music/music_info.gon",
+	},
+}

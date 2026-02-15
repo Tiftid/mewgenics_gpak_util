@@ -8,11 +8,34 @@ const options = @import("options");
 const Mode = enum{
 	pack,
 	unpack,
+	patch,
+};
+
+/// Tiftid 15/Feb/2026:
+/// Command-line flags for patch mode.
+const PatchFlags = struct{
+	no_delete_temp: bool = false,
 };
 
 /// Tiftid 15/Feb/2026:
 /// The size of std.Io.Reader and std.Io.Writer buffers we'll be using.
 const IO_BUFFER_SIZE = 4096;
+
+/// Tiftid 15/Feb/2026:
+/// The ZON type we're going to be attempting to parse from patch.zon when we're patching a mod into an 
+/// existing gpak file.
+pub const PatchZon = struct{
+	/// The version of the patch ZON file.
+	/// Used to assert forwards- or backwards-compatibility.
+	version: []const u8,
+	/// Filepaths (relative to patch root) to add to the gpak.
+	add: []const []const u8,
+	/// Filepaths (relative to gpak root) to completely remove from the gpak.
+	remove: []const []const u8,
+	/// Filepath relative to gpak root to replace.
+	/// Expects that the replacement has the same filepath relative to patch root.
+	override: []const []const u8,
+};
 
 /// Modified by Tiftid 14/Feb/2026 (St. Valentine's Day):
 /// Parse arguments and hand off execution to the relevant function.
@@ -37,8 +60,6 @@ pub fn main(init: std.process.Init) !void {
 		return usage(); // Wrong mode specified
 	};
 	
-	defer std.log.info("All done!", .{});
-	
 	switch(mode){
 		.unpack => {
 			const gpak_path = args.next() orelse return usage();
@@ -47,7 +68,10 @@ pub fn main(init: std.process.Init) !void {
 			const out_path = args.next();
 			
 			// Try to open the GPAK file.
-			const gpak: std.Io.File = try std.Io.Dir.openFileAbsolute(io, gpak_path, .{});
+			const gpak: std.Io.File = std.Io.Dir.openFileAbsolute(io, gpak_path, .{}) catch |e| {
+				std.log.err("{t}: Failed to open {s}!", .{e, gpak_path});
+				return e;
+			};
 			defer gpak.close(io);
 			
 			// If the output directory is specified, open it now.
@@ -70,13 +94,19 @@ pub fn main(init: std.process.Init) !void {
 			const gpak_path = args.next() orelse return usage();
 			
 			// Try to open the input directory.
-			const input_dir = try std.Io.Dir.openDirAbsolute(io, in_path, .{
+			const input_dir = std.Io.Dir.openDirAbsolute(io, in_path, .{
 				.iterate = true,
-			});
+			}) catch |e| {
+				std.log.err("{t}: Failed to open {s}!", .{e, in_path});
+				return e;
+			};
 			defer input_dir.close(io);
 			
 			// Try to create or open the GPAK file.
-			const gpak: std.Io.File = try std.Io.Dir.createFileAbsolute(io, gpak_path, .{});
+			const gpak: std.Io.File = std.Io.Dir.createFileAbsolute(io, gpak_path, .{}) catch |e| {
+				std.log.err("{t}: Failed to open {s}!", .{e, gpak_path});
+				return e;
+			};
 			defer gpak.close(io);
 			
 			var gpak_writer_buffer: [IO_BUFFER_SIZE]u8 = undefined;
@@ -86,16 +116,20 @@ pub fn main(init: std.process.Init) !void {
 			// Also try to create or open the temp file.
 			const temp_path = try std.fmt.allocPrint(
 				alc,
-				"{s}/{s}.temp",
+				"{s}{s}{s}.temp",
 				.{
 					std.fs.path.dirname(gpak_path) orelse "",
+					[1]u8{std.fs.path.sep},
 					std.fs.path.stem(gpak_path),
 				},
 			);
 			defer alc.free(temp_path);
 			// std.log.info("temp filepath: {s}", .{temp_path}); // sponge
 			
-			const temp: std.Io.File = try std.Io.Dir.createFileAbsolute(io, temp_path, .{});
+			const temp: std.Io.File = std.Io.Dir.createFileAbsolute(io, temp_path, .{}) catch |e| {
+				std.log.err("{t}: Failed to create or open {s}!", .{e, temp_path});
+				return e;
+			};
 			// Attempt to delete the temp file once we're done with it.
 			// If this operation fails, notify the user.
 			defer{
@@ -150,7 +184,75 @@ pub fn main(init: std.process.Init) !void {
 				try stream_reader_to_writer(reader, writer, length);
 			}
 		},
+		.patch => {
+			const patch_path = args.next() orelse return usage();
+			const gpak_path = args.next() orelse return usage();
+			
+			var flags: PatchFlags = .{};
+			while(args.next()) |flag| {
+				inline for(std.meta.fields(PatchFlags)) |field| {
+					if(std.mem.eql(u8, flag, field.name)){
+						// std.log.info("{s}: Flag enabled!", .{field.name}); // sponge
+						@field(flags, field.name) = true;
+					}
+				}
+			}
+			
+			// Try to open the patch directory.
+			const patch_dir = std.Io.Dir.openDirAbsolute(io, patch_path, .{}) catch |e| {
+				std.log.err("{t}: Failed to open {s}!", .{e, patch_path});
+				return e;
+			};
+			defer patch_dir.close(io);
+			
+			// Try to open the GPAK file.
+			const gpak: std.Io.File = std.Io.Dir.openFileAbsolute(io, gpak_path, .{
+				.mode = .read_write,
+			}) catch |e| {
+				std.log.err("{t}: Failed to open {s}!", .{e, gpak_path});
+				return e;
+			};
+			errdefer gpak.close(io);
+			
+			// Also try to create or open the temp file.
+			const temp_path = try std.fmt.allocPrint(
+				alc,
+				"{s}{s}{s}.temp",
+				.{
+					std.fs.path.dirname(gpak_path) orelse "",
+					[1]u8{std.fs.path.sep},
+					std.fs.path.stem(gpak_path),
+				},
+			);
+			defer alc.free(temp_path);
+			// std.log.info("temp filepath: {s}", .{temp_path}); // sponge
+			
+			const temp = std.Io.Dir.createFileAbsolute(io, temp_path, .{
+				.read = true,
+			}) catch |e| {
+				std.log.err("{t}: Failed to create or open {s}!", .{e, temp_path});
+				return e;
+			};
+			errdefer temp.close(io);
+			
+			// Indented so we close the temp file before we attempt to reopen it.
+			try patch(io, alc, gpak, temp, patch_dir);
+			
+			temp.close(io);
+			gpak.close(io);
+			
+			if(!flags.no_delete_temp){
+				// After patching, simply delete the gpak and rename the temp file.
+				std.log.info("Writing temp file into {s}...", .{gpak_path});
+				
+				try std.Io.Dir.deleteFileAbsolute(io, gpak_path);
+				
+				try std.Io.Dir.renameAbsolute(temp_path, gpak_path, io);
+			}
+		},
 	}
+	
+	std.log.info("All done!", .{});
 }
 
 /// Tiftid 14/Feb/2026 (St. Valentine's Day):
@@ -253,18 +355,18 @@ pub fn unpack(
 	const progress_filename: std.Progress.Node = progress.start("", 0);
 	defer progress_filename.end();
 	
-	// Make a writer for the gpak file.
-	var gpak_writer_buffer: [IO_BUFFER_SIZE]u8 = undefined;
-	var gpak_writer = gpak.writer(io, &gpak_writer_buffer);
-	const writer: *std.Io.Writer = &gpak_writer.interface;
-	
 	// After the filesystem, we have the raw file data.
 	// We assume that the file data is stored in the exact same order as the filepaths would suggest.
 	for(file_paths.items, file_lengths.items) |filepath, file_length| {
 		defer progress.completeOne();
 		
-		@memcpy(&progress_filename_buf, filepath[0..@min(filepath.len, std.Progress.Node.max_name_len)]);
-		progress_filename.setName(progress_filename_buf[0..@min(filepath.len, std.Progress.Node.max_name_len)]);
+		@memcpy(
+			progress_filename_buf[0..@min(filepath.len, std.Progress.Node.max_name_len)],
+			filepath[0..@min(filepath.len, std.Progress.Node.max_name_len)],
+		);
+		progress_filename.setName(
+			progress_filename_buf[0..@min(filepath.len, std.Progress.Node.max_name_len)],
+		);
 		
 		// std.log.info("Length of file {s}: 0x{X} b", .{filepath, file_length}); // sponge
 		
@@ -279,6 +381,10 @@ pub fn unpack(
 		// Make the output file.
 		const file = try output_dir.createFile(io, filepath, .{});
 		defer file.close(io);
+		
+		var file_writer_buffer: [IO_BUFFER_SIZE]u8 = undefined;
+		var file_writer = file.writer(io, &file_writer_buffer);
+		const writer: *std.Io.Writer = &file_writer.interface;
 		
 		// Stream the file.
 		try stream_reader_to_writer(reader, writer, file_length);
@@ -405,13 +511,381 @@ pub fn pack(
 }
 
 /// Tiftid 15/Feb/2026:
+/// The function to use when in patch mode.
+/// Bear in mind that we only want to read the gpak file here, not write to it.
+pub fn patch(
+	io: std.Io, alc: std.mem.Allocator,
+	gpak: std.Io.File,
+	temp: std.Io.File,
+	patch_dir: std.Io.Dir,
+) !void {
+	// First of all, attempt to read the patch file as ZON.
+	const patch_file = patch_dir.openFile(io, "patch.zon", .{}) catch |e| {
+		std.log.err("{t}: Failed to open patch.zon!", .{e});
+		return e;
+	};
+	defer patch_file.close(io);
+	
+	const patch_zon: PatchZon = blk: {
+		var patch_bytes: std.Io.Writer.Allocating = .init(alc);
+		errdefer patch_bytes.deinit();
+		
+		// We don't check that this u64 fits in a usize, since it's astronomically unlikely that it 
+		// won't.
+		const patch_file_size = try patch_file.length(io);
+		
+		var patch_reader_buffer: [IO_BUFFER_SIZE]u8 = undefined;
+		var patch_reader = patch_file.reader(io, &patch_reader_buffer);
+		const reader: *std.Io.Reader = &patch_reader.interface;
+		
+		const writer: *std.Io.Writer = &patch_bytes.writer;
+		
+		try stream_reader_to_writer(reader, writer, @intCast(patch_file_size));
+		
+		const patch_bytes_sentinel = try patch_bytes.toOwnedSliceSentinel(0);
+		defer alc.free(patch_bytes_sentinel);
+
+		break :blk try std.zon.parse.fromSliceAlloc(
+			PatchZon,
+			alc,
+			patch_bytes_sentinel,
+			null, // No diagnostics
+			.{}, // No non-default options for now
+		);
+	};
+	defer std.zon.parse.free(alc, patch_zon);
+	
+	// std.log.info("Patch ZON:\n{}", .{patch_zon}); // sponge
+	
+	// Added files.
+	// The filepaths are already held by the ZON memory.
+	var add_file_lengths: std.ArrayList(u32) = .empty;
+	defer add_file_lengths.deinit(alc);
+	
+	var file_paths: std.ArrayList([]const u8) = .empty;
+	defer {
+		for(file_paths.items) |filepath| {
+			alc.free(filepath);
+		}
+		file_paths.deinit(alc);
+	}
+	var file_lengths: std.ArrayList(u32) = .empty;
+	defer file_lengths.deinit(alc);
+	// Whether or not this file should be written into the output gpak.
+	var file_write_flags: std.ArrayList(bool) = .empty;
+	defer file_write_flags.deinit(alc);
+	
+	// Overwritten files.
+	// The filepaths are already held by the ZON memory.
+	var override_file_lengths: std.ArrayList(u32) = .empty;
+	defer override_file_lengths.deinit(alc);
+	
+	// Begin writing the add directory entries.
+	for(patch_zon.add) |add_path| {
+		const file = patch_dir.openFile(io, add_path, .{}) catch |e| {
+			std.log.err("{t}: Failed to open patch file {s}!", .{
+				e, add_path,
+			});
+			return e;
+		};
+		defer file.close(io);
+		
+		// Stat the file to ascertain its length.
+		// Return an error if it's too long to fit into a u32.
+		const file_length = try file.length(io);
+		if(file_length > std.math.maxInt(u32)){
+			@branchHint(.unlikely);
+			std.log.err("FATAL ERROR: Patch add file {s} is too long!", .{
+				add_path,
+			});
+			return error.PatchAddFileTooLong;
+		}
+		
+		// Finally, write the directory entry into the add file entries.
+		try add_file_lengths.append(alc, @intCast(file_length));
+	}
+	
+	// Begin iterating over the original directory, and differentiating between unmodified and overriden
+	// files.
+	var gpak_filereader_buffer: [IO_BUFFER_SIZE]u8 = undefined;
+	var gpak_filereader = gpak.reader(io, &gpak_filereader_buffer);
+	const gpak_reader: *std.Io.Reader = &gpak_filereader.interface;
+	
+	// Assert that the header is "\H" followed by two 0 bytes.
+	const header_ascii = try gpak_reader.take(2);
+	if(!std.mem.eql(u8, header_ascii, "\\H")){
+		std.log.warn("Expected GPAK file to start with \"\\H\", but it didn't!", .{});
+		return error.GpakWrongHeader;
+	}
+	const header_version = try gpak_reader.takeInt(u16, .little);
+	if(header_version != 0){
+		std.log.warn("Expected GPAK file to have two 0-bytes following \"\\H\", but it didn't!", .{});
+		return error.GpakWrongHeader;
+	}
+	
+	while(true){
+		const filepath_len = try gpak_reader.takeInt(u16, .little);
+		// Tiftid 15/Feb/2026:
+		// We break if the filepath length is longer than the length of the reader's buffer, as that 
+		// would be a ridiculously long filepath and likely indicates the end of this block.
+		if(filepath_len > IO_BUFFER_SIZE){
+			@branchHint(.unlikely); // This can only happen once, so we hint it as unlikely.
+			
+			// We also need to move the reader's seek position back 2, otherwise EVERY file read 
+			// gets shifted forward by two bytes.
+			gpak_reader.seek -= 2;
+			
+			break;
+		}
+		
+		const filepath = try gpak_reader.take(filepath_len);
+		// Tiftid 15/Feb/2026:
+		// New system for ascertaining where this block ends; we just parse the filepath exactly as it's 
+		// given to us, and if it doesn't look like it ends with a file extension, we break.
+		const ext = std.fs.path.extension(filepath);
+		// The longest file extension in Mewgenics is ".shader"
+		if(ext.len <= 2 or ext.len >= 8){
+			@branchHint(.unlikely); // This can only happen once, so we hint it as unlikely.
+			
+			// We also need to move the reader's seek position back, otherwise EVERY file read 
+			// gets shifted forward.
+			gpak_reader.seek -= 2 + filepath_len;
+			
+			break;
+		}
+		
+		// Iterate through the remove filepaths, and test for equality.
+		const is_remove: bool = blk: {
+			for(patch_zon.remove) |remove| {
+				if(std.mem.eql(u8, remove, filepath)){
+					// std.log.info("Found remove file {s}", .{filepath}); // sponge
+					break :blk true;
+				}
+			}
+			break :blk false;
+		};
+		// Iterate through the override file paths, and test for equality.
+		const is_override: bool = blk: {
+			for(patch_zon.override) |patch_filepath| {
+				if(std.mem.eql(u8, patch_filepath, filepath)){
+					// std.log.info("Found override file {s}", .{filepath}); // sponge
+					
+					// Write the file entry for the patch file into the override file entries.
+					const file = patch_dir.openFile(io, filepath, .{}) catch |e| {
+						std.log.err("{t}: Failed to open patch file {s}!", .{
+							e, filepath,
+						});
+						return e;
+					};
+					defer file.close(io);
+					
+					// Stat the file to ascertain its length.
+					// Return an error if it's too long to fit into a u32.
+					const file_length = try file.length(io);
+					if(file_length > std.math.maxInt(u32)){
+						@branchHint(.unlikely);
+						std.log.err("FATAL ERROR: Patch override file {s} is too long!", .{
+							filepath,
+						});
+						return error.PatchOverrideFileTooLong;
+					}
+					
+					try override_file_lengths.append(alc, @intCast(file_length));
+					
+					break :blk true;
+				}
+			}
+			break :blk false;
+		};
+		
+		try file_write_flags.append(alc, !is_override and !is_remove);
+		
+		// Dupe the filepath and shove it into the ArrayList.
+		// This is so the memory doesn't get stolen out from under our feet as the reader 
+		// forgets about this part of the file later.
+		// 
+		// We also have to do this BEFORE reading the file length, because if we don't, we get very 
+		// strange errors which are related to the reader calling .rebase() and rug-pulling this 
+		// memory out from under us.
+		try file_paths.append(alc, try alc.dupe(u8, filepath));
+		
+		const file_length = try gpak_reader.takeInt(u32, .little);
+		
+		try file_lengths.append(alc, file_length);
+	}
+	
+	// Begin writing to the temp file.
+	var temp_writer_buffer: [IO_BUFFER_SIZE]u8 = undefined;
+	var temp_writer = temp.writer(io, &temp_writer_buffer);
+	const writer: *std.Io.Writer = &temp_writer.interface;
+	
+	_ = try writer.write("\\H");
+	try writer.writeInt(u16, 0, .little);
+	
+	for(patch_zon.add, add_file_lengths.items) |filepath, file_length| {
+		if(filepath.len > std.math.maxInt(u16)){
+			@branchHint(.unlikely);
+			std.log.err("FATAL ERROR: Patch add file path {s} is too long!", .{
+				filepath,
+			});
+			return error.PatchAddPathTooLong;
+		}
+		try writer.writeInt(u16, @intCast(filepath.len), .little);
+		try writer.writeAll(filepath);
+		try writer.writeInt(u32, @intCast(file_length), .little);
+	}
+	
+	for(file_paths.items, file_lengths.items, file_write_flags.items) |filepath, file_length, write| {
+		if(!write) continue;
+		if(filepath.len > std.math.maxInt(u16)){
+			@branchHint(.unlikely);
+			std.log.err("FATAL ERROR: Original gpak file path {s} is too long!", .{
+				filepath,
+			});
+			return error.PatchUnmodifiedPathTooLong;
+		}
+		try writer.writeInt(u16, @intCast(filepath.len), .little);
+		try writer.writeAll(filepath);
+		try writer.writeInt(u32, @intCast(file_length), .little);
+	}
+	
+	for(patch_zon.override, override_file_lengths.items) |filepath, file_length| {
+		if(filepath.len > std.math.maxInt(u16)){
+			@branchHint(.unlikely);
+			std.log.err("FATAL ERROR: Patch override file path {s} is too long!", .{
+				filepath,
+			});
+			return error.PatchOverridePathTooLong;
+		}
+		try writer.writeInt(u16, @intCast(filepath.len), .little);
+		try writer.writeAll(filepath);
+		try writer.writeInt(u32, @intCast(file_length), .little);
+	}
+	
+	// Give the user feedback that the application is actually working towards something- 
+	// it just takes a while!
+	const progress: std.Progress.Node = std.Progress.start(io, .{
+		.refresh_rate_ns = .fromSeconds(1 / 120), // Update at 120 FPS if possible
+	});
+	defer progress.end();
+	
+	// Calculate the number of files we'll expect to write.
+	// We won't be writing all original files, so we need to reference their write flag.
+	const file_num: usize = blk: {
+		var out: usize = patch_zon.add.len + patch_zon.override.len;
+		for(file_write_flags.items) |write| {
+			if(write) out += 1;
+		}
+		break :blk out;
+	};
+	
+	progress.setName("Writing files");
+	progress.setEstimatedTotalItems(file_num);
+	
+	// We also make a child node, just so we can display which file is currently being written.
+	var progress_filename_buf: [std.Progress.Node.max_name_len]u8 = undefined;
+	const progress_filename: std.Progress.Node = progress.start("", 0);
+	defer progress_filename.end();
+	
+	for(patch_zon.add, add_file_lengths.items) |filepath, file_length| {
+		defer progress.completeOne();
+		// Set the child node's name to the path of the current file.
+		@memcpy(
+			progress_filename_buf[0..@min(filepath.len, std.Progress.Node.max_name_len)],
+			filepath[0..@min(filepath.len, std.Progress.Node.max_name_len)],
+		);
+		progress_filename.setName(
+			progress_filename_buf[0..@min(filepath.len, std.Progress.Node.max_name_len)],
+		);
+		
+		// Reopen the patch file and construct a reader from it.
+		// Stream the reader into the temp file's writer.
+		const file = patch_dir.openFile(io, filepath, .{}) catch |e| {
+			std.log.err("{t}: Failed to open patch file {s}!", .{
+				e, filepath,
+			});
+			return e;
+		};
+		defer file.close(io);
+		
+		var file_reader_buffer: [IO_BUFFER_SIZE]u8 = undefined;
+		var file_reader = file.reader(io, &file_reader_buffer);
+		const reader: *std.Io.Reader = &file_reader.interface;
+		
+		// If we don't flush here, the writer may refuse to write some of the beginning of the file... 
+		// for some reason.
+		try writer.flush();
+		try stream_reader_to_writer(reader, writer, file_length);
+	}
+	
+	for(file_paths.items, file_lengths.items, file_write_flags.items) |filepath, file_length, write| {
+		defer progress.completeOne();
+		// Set the child node's name to the path of the current file.
+		@memcpy(
+			progress_filename_buf[0..@min(filepath.len, std.Progress.Node.max_name_len)],
+			filepath[0..@min(filepath.len, std.Progress.Node.max_name_len)],
+		);
+		progress_filename.setName(
+			progress_filename_buf[0..@min(filepath.len, std.Progress.Node.max_name_len)],
+		);
+		
+		// Read the file and stream it to the temp file.
+		if(write){
+			try stream_reader_to_writer(gpak_reader, writer, file_length);
+		} else {
+			// Stream the file into a dummy writer, if we're not writing it.
+			// Somehow gpak_reader.toss(file_length) was always causing error.EndOfStream, no matter 
+			// what I tried.
+			var dummy_buffer: [IO_BUFFER_SIZE]u8 = undefined;
+			var dummy: std.Io.Writer.Discarding = .init(&dummy_buffer);
+			try stream_reader_to_writer(gpak_reader, &dummy.writer, file_length);
+		}
+	}
+	
+	for(patch_zon.override, override_file_lengths.items) |filepath, file_length| {
+		defer progress.completeOne();
+		// Set the child node's name to the path of the current file.
+		@memcpy(
+			progress_filename_buf[0..@min(filepath.len, std.Progress.Node.max_name_len)],
+			filepath[0..@min(filepath.len, std.Progress.Node.max_name_len)],
+		);
+		progress_filename.setName(
+			progress_filename_buf[0..@min(filepath.len, std.Progress.Node.max_name_len)],
+		);
+		
+		// Reopen the patch file and construct a reader from it.
+		// Stream the reader into the temp file's writer.
+		const file = patch_dir.openFile(io, filepath, .{}) catch |e| {
+			std.log.err("{t}: Failed to open patch file {s}!", .{
+				e, filepath,
+			});
+			return e;
+		};
+		defer file.close(io);
+		
+		var file_reader_buffer: [IO_BUFFER_SIZE]u8 = undefined;
+		var file_reader = file.reader(io, &file_reader_buffer);
+		const reader: *std.Io.Reader = &file_reader.interface;
+		
+		// If we don't flush here, the writer may refuse to write some of the beginning of the file... 
+		// for some reason.
+		// I have tested and confirmed that omitting the flush() call for the add files causes issues, 
+		// but I haven't done so for this, so you may be able to omit it, since stream_reader_to_writer() 
+		// always flushes after writing every chunk, and we don't mess with the reader in any other way 
+		// than through calling that function before this block.
+		try writer.flush();
+		try stream_reader_to_writer(reader, writer, file_length);
+	}
+}
+
+/// Tiftid 15/Feb/2026:
 /// Generic helper function for streaming from a reader to a writer.
 /// There are dedicated standard library functions for this, but they all failed me for some reason.
 pub fn stream_reader_to_writer(
 	reader: *std.Io.Reader,
 	writer: *std.Io.Writer,
 	length: usize,
-) !void {
+) (std.Io.Reader.Error || std.Io.Writer.Error)!void {
 	// Stream the input to the output, IO_BUFFER_SIZE bytes at a time.
 	var chunk_prev: usize = undefined;
 	var chunk: usize = 0;
@@ -436,6 +910,13 @@ pub fn usage() void {
 		\\OR
 		\\<pack>
 		\\  <path to input directory> <path to output gpak file>
+		\\OR
+		\\<patch>
+		\\  <path to patch directory containing patch.zon> <path to output gpak file>
+		\\  In patch mode, the following optional flags are available:
+		\\  no_delete_temp
+		\\    Leave the gpak file unmodified, and leave the temp file as the patched gpak.
+		\\    Primarily useful for testing.
 		, .{
 			options.version,
 		},

@@ -1,0 +1,645 @@
+//areas
+
+alley {
+	map    "alley/eatinrats_map.ogg"
+	battle "alley/eatinrats_battle.ogg"
+	boss   "alley/eatinrats_boss.ogg"
+	event  "alley/eatinrats_event.ogg"
+	midi   "alley/eatinrats_midi.mid"
+
+	intro "alley/eatinrats_intro.ogg"
+}
+
+boneyard {
+	map    "boneyard/boneyard_map.ogg"
+	battle "boneyard/boneyard_battle.ogg"
+	boss   "boneyard/boneyard_boss.ogg"
+	event  "boneyard/boneyard_event.ogg"
+	midi   "boneyard/boneyard_midi.mid"
+
+	intro  "boneyard/boneyard_intro.ogg"
+}
+
+caves {
+	map    "caves/caves_map.ogg"
+	battle "caves/caves_battle.ogg"
+	boss   "caves/caves_boss.ogg"
+	event  "caves/caves_event.ogg"
+	midi   "caves/caves_midi.mid"
+
+	intro  "caves/caves_intro.ogg"
+}
+
+junkyard {
+	map    "junkyard/chumbucket_map.ogg"
+	battle "junkyard/chumbucket_battle.ogg"
+	boss   "junkyard/chumbucket_boss.ogg"
+	event  "junkyard/chumbucket_event.ogg"
+	midi   "junkyard/chumbucket_midi.mid"
+
+	intro  "junkyard/chumbucket_intro.ogg"
+}
+
+sewers {
+	map    "sewers/sewers_map.ogg"
+	battle "sewers/sewers_battle.ogg"
+	boss   "sewers/sewers_boss.ogg"
+	event  "sewers/sewers_event.ogg"
+	midi   "sewers/sewers_midi.mid"
+
+	intro  "sewers/sewers_intro.ogg"
+}
+
+bunker {
+	map    "bunker/bunker_map.ogg"
+	battle "bunker/bunker_battle.ogg"
+	boss   [/*"bunker/bunker_boss_filtered.ogg" */"bunker/bunker_boss_transition.ogg" "bunker/bunker_boss_clear.ogg"]
+	event  "bunker/bunker_event.ogg"
+	midi   "bunker/bunker_midi.mid"
+
+	intro "bunker/bunker_intro.ogg"
+
+	//boss_transition_barrier_index 0
+}
+
+core {
+	map    "core/core_map.ogg"
+	battle "core/core_battle.ogg"
+	boss   "core/core_boss.ogg"
+	event  "core/core_event.ogg"
+	midi   "core/core_midi.mid"
+
+	intro  "core/core_intro.ogg"
+}
+
+crater {
+	map    "crater/crater_map.ogg"
+	battle "crater/crater_battle.ogg"
+	boss   "crater/crater_boss.ogg"
+	event  "crater/crater_event.ogg"
+	midi   "crater/crater_midi.mid"
+
+	intro "crater/crater_intro.ogg"
+}
+
+desert {
+	map    "desert/desert_map.ogg"
+	battle "desert/desert_battle.ogg"
+	boss   "desert/desert_boss.ogg"
+	event  "desert/desert_event.ogg"
+	midi   "desert/desert_midi.mid"
+
+	intro  "desert/desert_intro.ogg"
+}
+
+dimensionx {
+	map    "dimx/dimx_map.ogg"
+	battle "dimx/dimx_battle.ogg"
+	boss   "dimx/dimx_boss.ogg"
+	event  "dimx/dimx_event.ogg"
+	midi   "dimx/dimx_midi.mid"
+
+	// no intro
+}
+
+iceage {
+	map    "iceage/iceage_map.ogg"
+	battle "iceage/iceage_battle.ogg"
+	boss   "iceage/iceage_boss.ogg"
+	event  "iceage/iceage_event.ogg"
+	midi   "iceage/iceage_midi.mid"
+
+	intro  "iceage/iceage_intro.ogg"
+}
+
+jurassic {
+	map    "jurassic/jurassic_map.ogg"
+	battle "jurassic/jurassic_battle.ogg"
+	boss   "jurassic/jurassic_boss.ogg"
+	event  "jurassic/jurassic_event.ogg"
+	midi   "jurassic/jurassic_midi.mid"
+
+	intro  "jurassic/jurassic_intro.ogg"
+
+}
+
+lab {
+	map    "lab/lab_map.ogg"
+	battle "lab/lab_battle.ogg"
+	boss   "lab/lab_boss.ogg"
+	event  "lab/lab_event.ogg"
+	midi   "lab/lab_midi.mid"
+
+	intro  "lab/lab_intro.ogg"
+}
+
+meatworld {
+	map    "meatworld/meatworld_map.ogg"
+	battle "meatworld/meatworld_battle.ogg"
+	boss   "meatworld/meatworld_boss.ogg"
+	event  "meatworld/meatworld_event.ogg"
+	midi   "meatworld/meatworld_midi.mid"
+
+	// no intro
+}
+
+moon {
+	map    "moon/moon_map.ogg"
+	battle "moon/moon_battle.ogg"
+	boss   "moon/moon_boss.ogg"
+	event  "moon/moon_event.ogg"
+	midi   "moon/moon_midi.mid"
+
+	intro  "moon/moon_intro.ogg"
+}
+
+tutorial {
+	map    "tutorial/katfight_map.ogg"
+	battle "tutorial/katfight_battle.ogg"
+	boss   "tutorial/katfight_boss.ogg"
+	event  "tutorial/katfight_event.ogg"
+
+	//intro "tutorial/katfight_intro.ogg"
+}
+
+future {
+	map    "future/future_map.ogg"
+	battle "future/future_battle.ogg"
+	boss   "future/future_boss.ogg"
+	event  "future/future_event.ogg"
+	midi   "future/future_midi.mid"
+
+	intro  "future/future_intro.ogg"
+}
+
+theend {
+	map    "theend/theend_map.ogg"
+	battle "theend/theend_battle.ogg"
+	boss   "theend/theend_boss.ogg"
+	event  "theend/theend_event.ogg"
+	midi   "theend/theend_midi.mid"
+
+	intro  "theend/theend_intro.ogg"
+}
+
+endoftime {
+	map    "endoftime/sandman_map.ogg"
+	battle "endoftime/sandman_battle.ogg"
+	boss   "endoftime/sandman_boss.ogg"
+	event  "endoftime/sandman_event.ogg"
+	midi   "endoftime/sandman_midi.mid"
+
+	// no intro
+}
+
+
+//bosses
+
+guillotina {
+	battle "guillotina/comeback_kitty.ogg"
+	boss   "guillotina/comeback_kitty_vocal.ogg"
+	midi   "guillotina/comeback_kitty_midi.mid"
+
+	intro "guillotina/comeback_kitty_intro.ogg"
+}
+
+kaiju {
+	battle "kaiju/kaiju_battle.ogg"
+	boss   "kaiju/kaiju_boss.ogg"
+	midi   "kaiju/kaiju_midi.mid"
+
+	intro  "kaiju/kaiju_intro.ogg"
+}
+
+terminator {
+	boss   "terminator/terminator.ogg"
+	midi   "terminator/terminator_midi.mid"
+
+	intro "terminator/terminator_intro.ogg"
+}
+
+throbbingking {
+	boss   "throbbingking/throbbing_king.ogg"
+	intro  "throbbingking/throbbing_king_intro.ogg"
+}
+
+scrambled {
+	boss   "scrambled/scrambled.ogg"
+}
+
+chaos_boss {
+	boss   "chaos/chaos_boss.ogg"
+
+	intro  "chaos/chaos_boss_intro.ogg"
+}
+chaos_boss_part2 {
+	boss   ["chaos/chaos_boss_transition.ogg" "chaos/chaos_boss_reverse.ogg"]
+
+	// no intro
+}
+
+hitler3 {
+	boss   "hitler3/robot_cat_army.ogg"
+	battle "hitler3/smash_that_head.ogg"
+
+	intro  "hitler3/robot_cat_army_intro.ogg"
+}
+
+finalboss { //these aren't tied to battle, map etc I'm just sorting them by ID so its easy to fade into the next part during the fight
+	battle "finalboss/finalboss_part3b.ogg" //lol ignore the bad ordering here it doesnt matter
+	map    "finalboss/finalboss_part3.ogg" //phase 2
+	event  "finalboss/finalboss_part4.ogg" //phase 3
+	boss   "finalboss/finalboss_part2.ogg" //starts in this layer
+
+	intro  "finalboss/finalboss_intro.ogg"
+}
+
+//one offs
+
+adventure_prepare {
+	map    "oneoffs/adventure_prepare.ogg"
+}
+houseboss_prepare {
+	map    "oneoffs/houseboss_prepare.ogg"
+}
+
+
+//npc offices
+beanies_office {
+	boss ["npcthemes/beanies_intro.ogg", "npcthemes/beanies.ogg"]
+}
+butch_office {
+	boss ["npcthemes/butch_intro.ogg","npcthemes/butch.ogg"]
+}
+frank_office {
+	boss ["npcthemes/frank_intro.ogg","npcthemes/frank.ogg"]
+}
+jack_office {
+	boss ["npcthemes/jack_intro.ogg","npcthemes/jack.ogg"]
+}
+organ_office {
+	boss ["npcthemes/organ_intro.ogg","npcthemes/organ.ogg"]
+}
+tink_office {
+	boss ["npcthemes/tink_intro.ogg","npcthemes/tink.ogg"]
+}
+tracy_office {
+	boss ["npcthemes/tracy_intro.ogg","npcthemes/tracy.ogg"]
+}
+steven_office {
+	boss ["npcthemes/steven.ogg"]
+}
+
+
+//guillotina house boss
+houseboss_prepare_guillotina_1_intro {
+	map ["radio/boss_intros/guillotina_1_intro.ogg" "oneoffs/houseboss_prepare.ogg"]
+}
+houseboss_prepare_guillotina_1_repeat {
+	map ["radio/boss_intros/guillotina_1_repeat.ogg" "oneoffs/houseboss_prepare.ogg"]
+}
+houseboss_prepare_guillotina_2_intro {
+	map ["radio/boss_intros/guillotina_2_intro.ogg" "oneoffs/houseboss_prepare.ogg"]
+}
+houseboss_prepare_guillotina_2_repeat {
+	map ["radio/boss_intros/guillotina_2_repeat.ogg" "oneoffs/houseboss_prepare.ogg"]
+}
+houseboss_prepare_guillotina_3_intro {
+	map ["radio/boss_intros/guillotina_3_intro.ogg" "oneoffs/houseboss_prepare.ogg"]
+}
+houseboss_prepare_guillotina_3_repeat {
+	map ["radio/boss_intros/guillotina_3_repeat.ogg" "oneoffs/houseboss_prepare.ogg"]
+}
+
+//kaiju house boss
+houseboss_prepare_pyrophina_intro {
+	map ["radio/boss_intros/pyrophina_intro.ogg" "oneoffs/houseboss_prepare.ogg"]
+}
+houseboss_prepare_pyrophina_repeat {
+	map ["radio/boss_intros/pyrophina_repeat.ogg" "oneoffs/houseboss_prepare.ogg"]
+}
+houseboss_prepare_zaratana_intro {
+	map ["radio/boss_intros/zaratana_intro.ogg" "oneoffs/houseboss_prepare.ogg"]
+}
+houseboss_prepare_zaratana_repeat {
+	map ["radio/boss_intros/zaratana_repeat.ogg" "oneoffs/houseboss_prepare.ogg"]
+}
+houseboss_prepare_pyrophina_vs_zaratana_intro {
+	map ["radio/boss_intros/pyrophina_vs_zaratana_intro.ogg" "oneoffs/houseboss_prepare.ogg"]
+}
+houseboss_prepare_pyrophina_vs_zaratana_repeat {
+	map ["radio/boss_intros/pyrophina_vs_zaratana_repeat.ogg" "oneoffs/houseboss_prepare.ogg"]
+}
+
+//terminator house boss
+houseboss_prepare_terminator_1_intro {
+	map ["radio/boss_intros/terminator_1_intro.ogg" "oneoffs/houseboss_prepare.ogg"]
+}
+houseboss_prepare_terminator_1_repeat {
+	map ["radio/boss_intros/terminator_1_repeat.ogg" "oneoffs/houseboss_prepare.ogg"]
+}
+houseboss_prepare_terminator_2_intro {
+	map ["radio/boss_intros/terminator_2_intro.ogg" "oneoffs/houseboss_prepare.ogg"]
+}
+houseboss_prepare_terminator_2_repeat {
+	map ["radio/boss_intros/terminator_2_repeat.ogg" "oneoffs/houseboss_prepare.ogg"]
+}
+houseboss_prepare_terminator_3_intro {
+	map ["radio/boss_intros/terminator_3_intro.ogg" "oneoffs/houseboss_prepare.ogg"]
+}
+houseboss_prepare_terminator_3_repeat {
+	map ["radio/boss_intros/terminator_3_repeat.ogg" "oneoffs/houseboss_prepare.ogg"]
+}
+
+
+main_menu {
+	battle "doinya.ogg"
+}
+
+//house
+
+9th_life {
+	boss   "radio/songs/9th_life.ogg"
+	intros ["radio/intros/9th_life_1.ogg" "radio/intros/9th_life_2.ogg" "radio/intros/9th_life_3.ogg" "radio/intros/9th_life_4.ogg"]
+	outros ["radio/outros/9th_life_1.ogg" "radio/outros/9th_life_2.ogg" "radio/outros/9th_life_3.ogg" "radio/outros/9th_life_4.ogg"]
+}
+ballad_of_d_claude {
+	boss   "radio/songs/ballad_of_d_claude.ogg"
+	intros ["radio/intros/ballad_of_d_claude_1.ogg" "radio/intros/ballad_of_d_claude_2.ogg" "radio/intros/ballad_of_d_claude_3.ogg" "radio/intros/ballad_of_d_claude_4.ogg"]
+	outros ["radio/outros/ballad_of_d_claude_1.ogg" "radio/outros/ballad_of_d_claude_2.ogg" "radio/outros/ballad_of_d_claude_3.ogg" "radio/outros/ballad_of_d_claude_4.ogg"]
+}
+battle_of_the_fleabags {
+	boss   "radio/songs/battle_of_the_fleabags.ogg"
+	intros ["radio/intros/battle_of_the_fleabags_1.ogg" "radio/intros/battle_of_the_fleabags_2.ogg" "radio/intros/battle_of_the_fleabags_3.ogg" "radio/intros/battle_of_the_fleabags_4.ogg"]
+	outros ["radio/outros/battle_of_the_fleabags_1.ogg" "radio/outros/battle_of_the_fleabags_2.ogg" "radio/outros/battle_of_the_fleabags_3.ogg" "radio/outros/battle_of_the_fleabags_4.ogg"]
+}
+black_pussy {
+	boss   "radio/songs/black_pussy.ogg"
+	intros ["radio/intros/black_pussy_1.ogg" "radio/intros/black_pussy_2.ogg" "radio/intros/black_pussy_3.ogg" "radio/intros/black_pussy_4.ogg"]
+	outros ["radio/outros/black_pussy_1.ogg" "radio/outros/black_pussy_2.ogg" "radio/outros/black_pussy_3.ogg" "radio/outros/black_pussy_4.ogg"]
+}
+bravest_kat {
+	boss   "radio/songs/bravest_kat.ogg"
+	intros ["radio/intros/bravest_kat_1.ogg" "radio/intros/bravest_kat_2.ogg" "radio/intros/bravest_kat_3.ogg" "radio/intros/bravest_kat_4.ogg"]
+	outros ["radio/outros/bravest_kat_1.ogg" "radio/outros/bravest_kat_2.ogg" "radio/outros/bravest_kat_3.ogg" "radio/outros/bravest_kat_4.ogg"]
+}
+cat_chase {
+	boss   "radio/songs/cat_chase.ogg"
+	intros ["radio/intros/cat_chase_1.ogg" "radio/intros/cat_chase_2.ogg" "radio/intros/cat_chase_3.ogg" "radio/intros/cat_chase_4.ogg"]
+	outros ["radio/outros/cat_chase_1.ogg" "radio/outros/cat_chase_2.ogg" "radio/outros/cat_chase_3.ogg" "radio/outros/cat_chase_4.ogg"]
+}
+cat_race {
+	boss   "radio/songs/cat_race.ogg"
+	intros ["radio/intros/cat_race_1.ogg" "radio/intros/cat_race_2.ogg" "radio/intros/cat_race_3.ogg" "radio/intros/cat_race_4.ogg"]
+	outros ["radio/outros/cat_race_1.ogg" "radio/outros/cat_race_2.ogg" "radio/outros/cat_race_3.ogg" "radio/outros/cat_race_4.ogg"]
+}
+catsanova {
+	boss   "radio/songs/catsanova.ogg"
+	intros ["radio/intros/catsanova_1.ogg" "radio/intros/catsanova_2.ogg" "radio/intros/catsanova_3.ogg" "radio/intros/catsanova_4.ogg"]
+	outros ["radio/outros/catsanova_1.ogg" "radio/outros/catsanova_2.ogg" "radio/outros/catsanova_3.ogg" "radio/outros/catsanova_4.ogg"]
+}
+dirty_mittens {
+	boss   "radio/songs/dirty_mittens.ogg"
+	intros ["radio/intros/dirty_mittens_1.ogg" "radio/intros/dirty_mittens_2.ogg" "radio/intros/dirty_mittens_3.ogg" "radio/intros/dirty_mittens_4.ogg"]
+	outros ["radio/outros/dirty_mittens_1.ogg" "radio/outros/dirty_mittens_2.ogg" "radio/outros/dirty_mittens_3.ogg" "radio/outros/dirty_mittens_4.ogg"]
+}
+kannibal_kitty {
+	boss   "radio/songs/kannibal_kitty.ogg"
+	intros ["radio/intros/kannibal_kitty_1.ogg" "radio/intros/kannibal_kitty_2.ogg" "radio/intros/kannibal_kitty_3.ogg" "radio/intros/kannibal_kitty_4.ogg"]
+	outros ["radio/outros/kannibal_kitty_1.ogg" "radio/outros/kannibal_kitty_2.ogg" "radio/outros/kannibal_kitty_3.ogg" "radio/outros/kannibal_kitty_4.ogg"]
+}
+kat_fight {
+	boss   "radio/songs/kat_fight.ogg"
+	intros ["radio/intros/kat_fight_1.ogg" "radio/intros/kat_fight_2.ogg" "radio/intros/kat_fight_3.ogg" "radio/intros/kat_fight_4.ogg"]
+	outros ["radio/outros/kat_fight_1.ogg" "radio/outros/kat_fight_2.ogg" "radio/outros/kat_fight_3.ogg" "radio/outros/kat_fight_4.ogg"]
+}
+kitschy_kitty {
+	boss   "radio/songs/kitschy_kitty.ogg"
+	intros ["radio/intros/kitschy_kitty_1.ogg" "radio/intros/kitschy_kitty_2.ogg" "radio/intros/kitschy_kitty_3.ogg" "radio/intros/kitschy_kitty_4.ogg"]
+	outros ["radio/outros/kitschy_kitty_1.ogg" "radio/outros/kitschy_kitty_2.ogg" "radio/outros/kitschy_kitty_3.ogg" "radio/outros/kitschy_kitty_4.ogg"]
+}
+kitty_march {
+	boss   "radio/songs/kitty_march.ogg"
+	intros ["radio/intros/kitty_march_1.ogg" "radio/intros/kitty_march_2.ogg" "radio/intros/kitty_march_3.ogg" "radio/intros/kitty_march_4.ogg"]
+	outros ["radio/outros/kitty_march_1.ogg" "radio/outros/kitty_march_2.ogg" "radio/outros/kitty_march_3.ogg" "radio/outros/kitty_march_4.ogg"]
+}
+lost_kitty {
+	boss   "radio/songs/lost_kitty.ogg"
+	intros ["radio/intros/lost_kitty_1.ogg" "radio/intros/lost_kitty_2.ogg" "radio/intros/lost_kitty_3.ogg" "radio/intros/lost_kitty_4.ogg"]
+	outros ["radio/outros/lost_kitty_1.ogg" "radio/outros/lost_kitty_2.ogg" "radio/outros/lost_kitty_3.ogg" "radio/outros/lost_kitty_4.ogg"]
+}
+mice_cream {
+	boss   "radio/songs/mice_cream.ogg"
+	intros ["radio/intros/mice_cream_1.ogg" "radio/intros/mice_cream_2.ogg" "radio/intros/mice_cream_3.ogg" "radio/intros/mice_cream_4.ogg"]
+	outros ["radio/outros/mice_cream_1.ogg" "radio/outros/mice_cream_2.ogg" "radio/outros/mice_cream_3.ogg" "radio/outros/mice_cream_4.ogg"]
+}
+sad_cat_lady {
+	boss   "radio/songs/sad_cat_lady.ogg"
+	intros ["radio/intros/sad_cat_lady_1.ogg" "radio/intros/sad_cat_lady_2.ogg" "radio/intros/sad_cat_lady_3.ogg" "radio/intros/sad_cat_lady_4.ogg"]
+	outros ["radio/outros/sad_cat_lady_1.ogg" "radio/outros/sad_cat_lady_2.ogg" "radio/outros/sad_cat_lady_3.ogg" "radio/outros/sad_cat_lady_4.ogg"]
+}
+stray_cat {
+	boss   "radio/songs/stray_cat.ogg"
+	intros ["radio/intros/stray_cat_1.ogg" "radio/intros/stray_cat_2.ogg" "radio/intros/stray_cat_3.ogg" "radio/intros/stray_cat_4.ogg"]
+	outros ["radio/outros/stray_cat_1.ogg" "radio/outros/stray_cat_2.ogg" "radio/outros/stray_cat_3.ogg" "radio/outros/stray_cat_4.ogg"]
+}
+tears_in_my_milkbowl {
+	boss   "radio/songs/tears_in_my_milkbowl.ogg"
+	intros ["radio/intros/tears_in_my_milkbowl_1.ogg" "radio/intros/tears_in_my_milkbowl_2.ogg" "radio/intros/tears_in_my_milkbowl_3.ogg" "radio/intros/tears_in_my_milkbowl_4.ogg"]
+	outros ["radio/outros/tears_in_my_milkbowl_1.ogg" "radio/outros/tears_in_my_milkbowl_2.ogg" "radio/outros/tears_in_my_milkbowl_3.ogg" "radio/outros/tears_in_my_milkbowl_4.ogg"]
+}
+the_legend_of_the_claw {
+	boss   "radio/songs/the_legend_of_the_claw.ogg"
+	intros ["radio/intros/the_legend_of_the_claw_1.ogg" "radio/intros/the_legend_of_the_claw_2.ogg" "radio/intros/the_legend_of_the_claw_3.ogg" "radio/intros/the_legend_of_the_claw_4.ogg"]
+	outros ["radio/outros/the_legend_of_the_claw_1.ogg" "radio/outros/the_legend_of_the_claw_2.ogg" "radio/outros/the_legend_of_the_claw_3.ogg" "radio/outros/the_legend_of_the_claw_4.ogg"]
+}
+alone_in_the_dark {
+	boss	"radio/songs/alone_in_the_dark.ogg"
+	intros	["radio/intros/alone_in_the_dark_intro1.ogg" "radio/intros/alone_in_the_dark_intro2.ogg"]
+	outros	["radio/outros/alone_in_the_dark_outro.ogg"]
+}
+angel_wings {
+	boss	"radio/songs/angel_wings.ogg"
+	intros	["radio/intros/angel_wings_intro.ogg"]
+	outros	["radio/outros/angel_wings_outro.ogg"]
+}
+brush_your_teeth {
+	boss	"radio/songs/brush_your_teeth.ogg"
+	intros	["radio/intros/brush_your_teeth_intro1.ogg" "radio/intros/brush_your_teeth_intro2.ogg"]
+	outros	["radio/outros/brush_your_teeth_outro1.ogg" "radio/outros/brush_your_teeth_outro2.ogg"]
+}
+calamine_smoothie {
+	boss	"radio/songs/calamine_smoothie.ogg"
+	intros	["radio/intros/calamine_smoothie_intro.ogg"]
+	outros	["radio/outros/calamine_smoothie_outro.ogg"]
+}
+chaos {
+	boss	"radio/songs/chaos.ogg"
+	intros	["radio/intros/chaos_intro1.ogg" "radio/intros/chaos_intro2.ogg"]
+	outros	["radio/outros/chaos_outro1.ogg" "radio/outros/chaos_outro2.ogg"]
+}
+chumbucket_kitty {
+	boss	"radio/songs/chumbucket_kitty.ogg"
+	intros	["radio/intros/chumbucket_kitty_intro.ogg"]
+	outros	["radio/outros/chumbucket_kitty_outro.ogg"]
+}
+crystaline_dreams {
+	boss	"radio/songs/crystaline_dreams.ogg"
+	intros	["radio/intros/crystalline_dreams_intro1.ogg" "radio/intros/crystalline_dreams_intro2.ogg"]
+	outros	["radio/outros/crystalline_dreams_outro.ogg"]
+}
+down_with_the_devil {
+	boss	"radio/songs/down_with_the_devil.ogg"
+	intros	["radio/intros/down_with_the_devil_intro1.ogg" "radio/intros/down_with_the_devil_intro2.ogg"]
+	outros	["radio/outros/down_with_the_devil_outro.ogg"]
+}
+endless_misery {
+	boss	"radio/songs/endless_misery.ogg"
+	intros	["radio/intros/endless_misery_intro1.ogg" "radio/intros/endless_misery_intro2.ogg" "radio/intros/endless_misery_intro3.ogg"]
+	outros	["radio/outros/endless_misery_outro1.ogg" "radio/outros/endless_misery_outro2.ogg"]
+}
+fleas_and_parasites_v1 {
+	boss	"radio/songs/fleas_and_parasites_v1.ogg"
+	intros	["radio/intros/fleas_parasites_intro.ogg"]
+	outros	["radio/outros/fleas_parasites_outro.ogg"]
+
+}
+flush {
+	boss	"radio/songs/flush.ogg"
+	intros	["radio/intros/flush_intro1.ogg" "radio/intros/flush_intro2.ogg" "radio/intros/flush_intro3.ogg"]
+	outros	["radio/outros/flush_outro1.ogg" "radio/outros/flush_outro2.ogg"]
+}
+future_meets_the_past {
+	boss	"radio/songs/future_meets_the_past.ogg"
+	intros	["radio/intros/future_meets_the_past_intro1.ogg" "radio/intros/future_meets_the_past_intro2.ogg"]
+	outros	["radio/outros/future_meets_the_past_outro1.ogg" "radio/outros/future_meets_the_past_outro2.ogg" "radio/outros/future_meets_the_past_outro3.ogg"]
+}
+get_in_the_cage {
+	boss	"radio/songs/get_in_the_cage.ogg"
+	intros	["radio/intros/get_in_the_cage_intro1.ogg" "radio/intros/get_in_the_cage_intro2.ogg" "radio/intros/get_in_the_cage_intro3.ogg"]
+	outros	["radio/outros/get_in_the_cage_outro.ogg"]
+}
+humanicide {
+	boss	"radio/songs/humanicide.ogg"
+	intros	["radio/intros/humanicide_intro1.ogg" "radio/intros/humanicide_intro2.ogg" "radio/intros/humanicide_intro3.ogg"]
+	outros	["radio/outros/humanicide_outro1.ogg" "radio/outros/humanicide_outro2.ogg" "radio/outros/humanicide_outro3.ogg"]
+
+}
+lonesome_road {
+	boss	"radio/songs/lonesome_road.ogg"
+	intros	["radio/intros/lonesome_road_intro1.ogg" "radio/intros/lonesome_road_intro2.ogg"]
+	outros	["radio/outros/lonesome_road_outro1.ogg" "radio/outros/lonesome_road_outro2.ogg" "radio/outros/lonesome_road_outro3.ogg"]
+}
+meow_meow_meow {
+	boss	"radio/songs/meow_meow_meow.ogg"
+	intros	["radio/intros/meow_meow_meow_intro.ogg"]
+	outros	["radio/outros/meow_meow_meow_outro.ogg"]
+
+}
+mom_i_really_hate_you {
+	boss	"radio/songs/mom_i_really_hate_you.ogg"
+	intros	["radio/intros/mom_i_really_hate_you_intro1.ogg" "radio/intros/mom_i_really_hate_you_intro2.ogg" "radio/intros/mom_i_really_hate_you_intro3.ogg"]
+	outros	["radio/outros/mom_i_really_hate_you_outro1.ogg" "radio/outros/mom_i_really_hate_you_outro2.ogg" "radio/outros/mom_i_really_hate_you_outro3.ogg"]
+}
+napping_all_day {
+	boss	"radio/songs/napping_all_day.ogg"
+	intros	["radio/intros/napping_all_day_intro.ogg"]
+	outros	["radio/outros/napping_all_day_outro.ogg"]
+}
+peppy_country_ditty {
+	boss	"radio/songs/peppy_country_ditty.ogg"
+	intros	["radio/intros/peppy_country_ditty_intro1.ogg" "radio/intros/peppy_country_ditty_intro2.ogg"]
+	outros	["radio/outros/peppy_country_ditty_outro1.ogg" "radio/outros/peppy_country_ditty_outro2.ogg" "radio/outros/peppy_country_ditty_outro3.ogg"]
+}
+so_high {
+	boss	"radio/songs/so_high.ogg"
+	intros	["radio/intros/so_high_intro1.ogg" "radio/intros/so_high_intro2.ogg" "radio/intros/so_high_intro3.ogg" "radio/intros/so_high_intro4.ogg"]
+	outros	["radio/outros/so_high_outro1.ogg" "radio/outros/so_high_outro3.ogg"]
+}
+sweet_delicious {
+	boss	"radio/songs/sweet_delicious.ogg"
+	intros	["radio/intros/sweet_delicious_intro1.ogg" "radio/intros/sweet_delicious_intro2.ogg" "radio/intros/sweet_delicious_intro3.ogg" "radio/intros/sweet_delicious_intro4.ogg"]
+	outros	["radio/outros/sweet_delicious_outro1.ogg" "radio/outros/sweet_delicious_outro2.ogg" "radio/outros/sweet_delicious_outro3.ogg"]
+}
+taser_paws {
+	boss	"radio/songs/taser_paws.ogg"
+	intros	["radio/intros/taser_paws_intro1.ogg" "radio/intros/taser_paws_intro2.ogg" "radio/intros/taser_paws_intro3.ogg"]
+	outros	["radio/outros/taser_paws_outro1.ogg" "radio/outros/taser_paws_outro2.ogg"]
+}
+them_kitty_bones {
+	boss	"radio/songs/them_kitty_bones.ogg"
+	intros	["radio/intros/them_kitty_bones_intro1.ogg" "radio/intros/them_kitty_bones_intro2.ogg" "radio/intros/them_kitty_bones_intro3.ogg" "radio/intros/them_kitty_bones_intro4.ogg"]
+	outros	["radio/outros/them_kitty_bones_outro1.ogg" "radio/outros/them_kitty_bones_outro2.ogg"]
+}
+tuff {
+	boss	"radio/songs/tuff.ogg"
+	intros	["radio/intros/tuff_intro1.ogg" "radio/intros/tuff_intro2.ogg"]
+	outros	["radio/outros/tuff_outro1.ogg" "radio/outros/tuff_outro2.ogg"]
+}
+were_dead {
+	boss	"radio/songs/were_dead.ogg"
+	intros	["radio/intros/were_dead_intro.ogg" "radio/intros/were_dead_intro2.ogg"]
+	outros	["radio/outros/were_dead_outro1.ogg" "radio/outros/were_dead_outro2.ogg"]
+}
+you_know_who {
+	boss	"radio/songs/you_know_who.ogg"
+	intros	["radio/intros/guillotina_intro1.ogg" "radio/intros/guillotina_intro2.ogg" "radio/intros/guillotina_intro3.ogg" "radio/intros/guillotina_intro4.ogg"]
+	outros	["radio/outros/guillotina_outro1.ogg" "radio/outros/guillotina_outro2.ogg" "radio/outros/guillotina_outro3.ogg"]
+}
+break_his_chains {
+	boss	"radio/songs/break_his_chains.ogg"
+	intros	["radio/intros/break_his_chains_intro1.ogg" "radio/intros/break_his_chains_intro2.ogg" "radio/intros/break_his_chains_intro3.ogg"]
+	outros	["radio/outros/break_his_chains_outro1.ogg" "radio/outros/break_his_chains_outro2.ogg"]
+}
+eatin_rats {
+	boss	"radio/songs/eatin_rats.ogg"
+	intros	["radio/intros/eatin_rats_intro1.ogg" "radio/intros/eatin_rats_intro2.ogg"]
+	outros	["radio/outros/eatin_rats_outro1.ogg" "radio/outros/eatin_rats_outro2.ogg"]
+}
+feline_invader {
+	boss	"radio/songs/feline_invader.ogg"
+	intros	["radio/intros/feline_invader_intro1.ogg" "radio/intros/feline_invader_intro2.ogg" "radio/intros/feline_invader_intro3.ogg"]
+	outros	["radio/outros/feline_invader_outro1.ogg" "radio/outros/feline_invader_outro2.ogg"]
+}
+radio_throbbing_king {
+	boss	"radio/songs/throbbing_king.ogg"
+	intros	["radio/intros/throbbing_king_intro.ogg"]
+	outros	["radio/outros/throbbing_king_outro.ogg"]
+
+}
+radio_scrambled {
+	boss	"radio/songs/scrambled.ogg"
+	intros	["radio/intros/scrambled_intro.ogg"]
+	outros	["radio/outros/scrambled_outro.ogg"]
+
+}
+
+radio_final_boss {
+	boss	"radio/songs/final_boss.ogg"
+	intros	["radio/intros/dig_your_own_grave_intro.ogg" "radio/intros/dig_your_own_grave_intro_1.ogg" "radio/intros/dig_your_own_grave_intro_2.ogg" "radio/intros/dig_your_own_grave_intro_3.ogg"]
+	outros	["radio/outros/dig_your_own_grave_outro.ogg" "radio/outros/dig_your_own_grave_outro_1.ogg" "radio/outros/dig_your_own_grave_outro_2.ogg" "radio/outros/dig_your_own_grave_outro_3.ogg"]
+}
+
+crazy_days {
+	boss	"radio/songs/crazy_days.ogg"
+	intros	["radio/intros/crazy_days_intro_1.ogg" "radio/intros/crazy_days_intro_2.ogg" "radio/intros/crazy_days_intro_3.ogg"]
+	outros	["radio/outros/crazy_days_outro_1.ogg" "radio/outros/crazy_days_outro_2.ogg" "radio/outros/crazy_days_outro_3.ogg"]
+}
+
+bolt_of_lightning {
+	boss	"radio/songs/bolt_of_lightning.ogg"
+	intros	["radio/intros/bolt_of_lightning_intro_1.ogg" "radio/intros/bolt_of_lightning_intro_2.ogg" "radio/intros/bolt_of_lightning_intro_3.ogg"]
+	outros	["radio/outros/bolt_of_lightning_outro_1.ogg" "radio/outros/bolt_of_lightning_outro_2.ogg" "radio/outros/bolt_of_lightning_outro_3.ogg"]
+}
+
+crack_of_doom {
+	boss	"radio/songs/the_crack_of_doom.ogg"
+	intros	["radio/intros/crack_of_doom_intro_1.ogg" "radio/intros/crack_of_doom_intro_2.ogg" "radio/intros/crack_of_doom_intro_3.ogg"]
+	outros	["radio/outros/crack_of_doom_outro_1.ogg" "radio/outros/crack_of_doom_outro_2.ogg" "radio/outros/crack_of_doom_outro_3.ogg"]
+}
+
+
+/*radioteaser {
+	boss   ["../util/silence.ogg" "teaser.ogg" "../util/silence.ogg"]
+}
+*/

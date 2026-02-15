@@ -18,15 +18,9 @@ This makes it a relatively compact way to encode a large archive of files, and a
 - The game's graphics are primarily .swf files, meaning that [Edmund](https://en.wikipedia.org/wiki/Edmund_McMillen) is still a Flash chad in 2026
 - That song where they go "cat fight cat fight" lives at audio/music/tutorial/katfight_boss.ogg
 
-## Future plans
-I intend to add a "patch" mode, where you provide the following things:
-- The path to an existing gpak file to patch
-- A [ZON](https://ziglang.org/documentation/master/std/#std.zon) file describing how to patch the gpak
-- The path to a directory containing the files to patch in (including the ZON file; it won't be a separate argument)
-- The ZON file will probably be laid out as follows:
-  - The root of the file will be a struct with three fields; "remove", "add" and "override"
-  - The "remove" field is a list of filepaths to completely remove from the original gpak
-  - The "add" field is a list of filepaths relative to the patch directory to add to the gpak
-  - The "override" field is a list of structs; the first field is a filepath relative to the gpak root, and the second field is a filepath relative to the patch root; the file in the gpak will be replaced with the patch file
+## What's that example_patch folder?
+Patch mode has recently landed with v0.0.3!
+This is a new mode that allows you to distribute a lightweight "patch", which is a small folder of files and a "patch.zon" file that describes how to patch them into the gpak file.
+This is significantly easier to distribute than an entire, packed gpak which mostly contains unmodified base-game assets.
 
-The intent behind doing this is to make mods distributable; instead of having to distribute an entire 4.5 GB gpak file which contains mostly unmodified base-game content, you can distribute a handful of files to be used with the patch mode of this utility.
+example_patch contains the patch I used for testing this mode, and you should be able to use it to patch your own resources.gpak to test if it works on your system too.
