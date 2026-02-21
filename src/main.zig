@@ -9,6 +9,7 @@ const Mode = enum{
 	pack,
 	unpack,
 	patch,
+	diff,
 };
 
 /// Tiftid 15/Feb/2026:
@@ -81,6 +82,124 @@ pub const HeaderVersion = enum(u32){
 		return error.BadTruthValue;
 	}
 };
+
+/// Tiftid 21/Feb/2026:
+/// Struct representing the file dictionary of a GPAK file.
+/// Assumes that the slice of entries is heap-allocated.
+pub const Dictionary = struct{
+	entries: []Entry,
+	
+	/// Tiftid 21/Feb/2026:
+	/// Read a dictionary from a gpak file reader.
+	/// Assumes that the reader has already sought past the file header.
+	/// Optionally also takes a user-provided function to call on each entry.
+	pub fn read(reader: *std.Io.Reader, alc: std.mem.Allocator) !@This() {
+		var entries: std.ArrayList(Entry) = .empty;
+		while(try Entry.read(reader, alc)) |entry| {
+			try entries.append(alc, entry);
+		}
+		return .{
+			.entries = try entries.toOwnedSlice(alc),
+		};
+	}
+	
+	/// Release all allocated memory.
+	pub fn deinit(self: @This(), alc: std.mem.Allocator) void {
+		for(self.entries) |entry| {
+			entry.deinit(alc);
+		}
+		alc.free(self.entries);
+	}
+	
+	/// Tiftid 21/Feb/2026:
+	/// Simple struct to hold a dictionary entry.
+	pub const Entry = struct{
+		path: [*]u8,
+		path_length: u16,
+		file_length: u32,
+		
+		/// Read a dictionary entry from a stream.
+		/// We take an allocator as input to dupe the filepath, meaning that this struct allocates 
+		/// memory and should have .deinit(allocator) called on it eventually.
+		/// 
+		/// If this function returns null instead of an error, it means that the end of the file dict 
+		/// has been reached, and the reader's seek has been adjusted to point at the start of the file 
+		/// data.
+		pub fn read(reader: *std.Io.Reader, alc: std.mem.Allocator) (
+			std.Io.Reader.Error ||
+			std.mem.Allocator.Error
+		)!?@This() {
+			const filepath_len = try reader.takeInt(u16, .little);
+			// Tiftid 15/Feb/2026:
+			// We break if the filepath length is longer than the length of the reader's buffer, as that 
+			// would be a ridiculously long filepath and likely indicates the end of this block.
+			if(filepath_len > IO_BUFFER_SIZE){
+				@branchHint(.unlikely);
+				
+				// We also need to move the reader's seek position back 2, otherwise EVERY file read 
+				// gets shifted forward by two bytes.
+				reader.seek -= 2;
+				return null;
+			}
+			
+			const filepath = try reader.take(filepath_len);
+			// Tiftid 15/Feb/2026:
+			// New system for ascertaining where this block ends; we just parse the filepath exactly as 
+			// it's given to us, and if it doesn't look like it ends with a file extension, we break.
+			const ext = std.fs.path.extension(filepath);
+			// The longest file extension in Mewgenics is ".shader"
+			if(ext.len <= 2 or ext.len >= 8){
+				@branchHint(.unlikely);
+				
+				reader.seek -= 2 + filepath_len;
+				return null;
+			}
+			const allocated_filepath = try alc.dupe(u8, filepath);
+			
+			const file_length = try reader.takeInt(u32, .little);
+			
+			return .{
+				.path = allocated_filepath.ptr,
+				.path_length = filepath_len,
+				.file_length = file_length,
+			};
+		}
+		
+		/// Format this entry into a stream.
+		pub fn format(self: @This(), writer: *std.Io.Writer) std.Io.Writer.Error!void {
+			try writer.print(
+				"{s}: {d} B", .{
+					self.path[0..self.path_length],
+					self.file_length,
+				},
+			);
+		}
+		
+		/// Release the entry's filepath.
+		pub fn deinit(self: @This(), alc: std.mem.Allocator) void {
+			alc.free(self.path[0..self.path_length]);
+		}
+	};
+};
+
+/// Tiftid 15/Feb/2026:
+/// Generic helper function for streaming from a reader to a writer.
+/// There are dedicated standard library functions for this, but they all failed me for some reason.
+pub fn stream_reader_to_writer(
+	reader: *std.Io.Reader,
+	writer: *std.Io.Writer,
+	length: usize,
+) (std.Io.Reader.Error || std.Io.Writer.Error)!void {
+	// Stream the input to the output, IO_BUFFER_SIZE bytes at a time.
+	var chunk_prev: usize = undefined;
+	var chunk: usize = 0;
+	while(chunk != length){
+		chunk_prev = chunk;
+		chunk = @min(length, chunk + IO_BUFFER_SIZE);
+		_ = try writer.write(try reader.take(chunk - chunk_prev));
+		try writer.flush();
+	}
+}
 
 /// Modified by Tiftid 14/Feb/2026 (St. Valentine's Day):
 /// Parse arguments and hand off execution to the relevant function.
@@ -340,6 +459,22 @@ pub fn main(init: std.process.Init) !void {
 				try std.Io.Dir.renameAbsolute(temp_path, gpak_path, io);
 			}
 		},
+		.diff => {
+			const first_gpak_path = args.next() orelse return usage();
+			const second_gpak_path = args.next() orelse return usage();
+			const output_dir_path = args.next() orelse return usage();
+			
+			const first_gpak = try std.Io.Dir.openFileAbsolute(io, first_gpak_path, .{});
+			defer first_gpak.close(io);
+			
+			const second_gpak = try std.Io.Dir.openFileAbsolute(io, second_gpak_path, .{});
+			defer second_gpak.close(io);
+			
+			const output_dir = try std.Io.Dir.openDirAbsolute(io, output_dir_path, .{});
+			defer output_dir.close(io);
+			
+			try diff(io, alc, first_gpak, second_gpak, output_dir);
+		},
 	}
 	
 	std.log.info("All done!", .{});
@@ -352,17 +487,6 @@ pub fn unpack(
 	gpak: std.Io.File, output_dir: std.Io.Dir,
 	header_version: HeaderVersion,
 ) !void {
-	// GPAK filepaths and their associated file lengths.
-	var file_paths: std.ArrayList([]const u8) = .empty;
-	defer{
-		for(file_paths.items) |path| {
-			alc.free(path);
-		}
-		file_paths.deinit(alc);
-	}
-	var file_lengths: std.ArrayList(u32) = .empty;
-	defer file_lengths.deinit(alc);
-	
 	// Get a reader from the GPAK file.
 	var gpak_reader_buffer: [IO_BUFFER_SIZE]u8 = undefined;
 	var gpak_reader: std.Io.File.Reader = gpak.reader(io, &gpak_reader_buffer);
@@ -386,54 +510,8 @@ pub fn unpack(
 	}
 	
 	// Now that we've parsed the header, we can begin parsing the virtual filesystem.
-	while(true) {
-		// std.log.info("Attempting to parse header of file at offset 0x{X:0>8}", .{i}); // sponge
-		
-		// A file is defined by a u16 representing the length of the filepath, then the filepath 
-		// itself, then a u32 representing the length of the file in bytes.
-		const filepath_len = try reader.takeInt(u16, .little);
-		// Tiftid 15/Feb/2026:
-		// We break if the filepath length is longer than the length of the reader's buffer, as that 
-		// would be a ridiculously long filepath and likely indicates the end of this block.
-		if(filepath_len > IO_BUFFER_SIZE){
-			@branchHint(.unlikely); // This can only happen once, so we hint it as unlikely.
-			
-			// We also need to move the reader's seek position back 2, otherwise EVERY file read 
-			// gets shifted forward by two bytes.
-			reader.seek -= 2;
-			
-			break;
-		}
-		
-		const filepath = try reader.take(filepath_len);
-		// Tiftid 15/Feb/2026:
-		// New system for ascertaining where this block ends; we just parse the filepath exactly as it's 
-		// given to us, and if it doesn't look like it ends with a file extension, we break.
-		const ext = std.fs.path.extension(filepath);
-		// The longest file extension in Mewgenics is ".shader"
-		if(ext.len <= 2 or ext.len >= 8){
-			@branchHint(.unlikely); // This can only happen once, so we hint it as unlikely.
-			
-			// We also need to move the reader's seek position back, otherwise EVERY file read 
-			// gets shifted forward.
-			reader.seek -= 2 + filepath_len;
-			
-			break;
-		}
-		
-		// Dupe the filepath and shove it into the ArrayList.
-		// This is so the memory doesn't get stolen out from under our feet as the reader 
-		// forgets about this part of the file later.
-		// 
-		// We also have to do this BEFORE reading the file length, because if we don't, we get very 
-		// strange errors which are related to the reader calling .rebase() and rug-pulling this 
-		// memory out from under us.
-		try file_paths.append(alc, try alc.dupe(u8, filepath));
-		
-		const file_length = try reader.takeInt(u32, .little);
-		
-		try file_lengths.append(alc, file_length);
-	}
+	const dictionary: Dictionary = try .read(reader, alc);
+	defer dictionary.deinit(alc);
 	
 	// Give the user feedback that the application is actually working towards something- 
 	// it just takes a while!
@@ -443,7 +521,7 @@ pub fn unpack(
 	defer progress.end();
 	
 	progress.setName("Extracting files");
-	progress.setEstimatedTotalItems(file_paths.items.len);
+	progress.setEstimatedTotalItems(dictionary.entries.len);
 	
 	// We also make a child node, just so we can display which file is currently being extracted.
 	var progress_filename_buf: [std.Progress.Node.max_name_len]u8 = undefined;
@@ -452,8 +530,12 @@ pub fn unpack(
 	
 	// After the filesystem, we have the raw file data.
 	// We assume that the file data is stored in the exact same order as the filepaths would suggest.
-	for(file_paths.items, file_lengths.items) |filepath, file_length| {
+	for(dictionary.entries) |entry| {
 		defer progress.completeOne();
+		
+		// std.log.info("Entry: {f}", .{entry}); // sponge
+		
+		const filepath = entry.path[0..entry.path_length];
 		
 		@memcpy(
 			progress_filename_buf[0..@min(filepath.len, std.Progress.Node.max_name_len)],
@@ -482,7 +564,7 @@ pub fn unpack(
 		const writer: *std.Io.Writer = &file_writer.interface;
 		
 		// Stream the file.
-		try stream_reader_to_writer(reader, writer, file_length);
+		try stream_reader_to_writer(reader, writer, entry.file_length);
 	}
 }
 
@@ -668,15 +750,6 @@ pub fn patch(
 	defer alc.free(add_file_write_flags);
 	@memset(add_file_write_flags, true); // Initialise as all-true
 	
-	var file_paths: std.ArrayList([]const u8) = try .initCapacity(alc, 20000);
-	defer {
-		for(file_paths.items) |filepath| {
-			alc.free(filepath);
-		}
-		file_paths.deinit(alc);
-	}
-	var file_lengths: std.ArrayList(u32) = try .initCapacity(alc, 20000);
-	defer file_lengths.deinit(alc);
 	// Whether or not this file should be written into the output gpak.
 	var file_write_flags: std.ArrayList(bool) = try .initCapacity(alc, 20000);
 	defer file_write_flags.deinit(alc);
@@ -714,36 +787,11 @@ pub fn patch(
 		});
 	}
 	
-	while(true){
-		const filepath_len = try gpak_reader.takeInt(u16, .little);
-		// Tiftid 15/Feb/2026:
-		// We break if the filepath length is longer than the length of the reader's buffer, as that 
-		// would be a ridiculously long filepath and likely indicates the end of this block.
-		if(filepath_len > IO_BUFFER_SIZE){
-			@branchHint(.unlikely); // This can only happen once, so we hint it as unlikely.
-			
-			// We also need to move the reader's seek position back 2, otherwise EVERY file read 
-			// gets shifted forward by two bytes.
-			gpak_reader.seek -= 2;
-			
-			break;
-		}
-		
-		const filepath = try gpak_reader.take(filepath_len);
-		// Tiftid 15/Feb/2026:
-		// New system for ascertaining where this block ends; we just parse the filepath exactly as it's 
-		// given to us, and if it doesn't look like it ends with a file extension, we break.
-		const ext = std.fs.path.extension(filepath);
-		// The longest file extension in Mewgenics is ".shader"
-		if(ext.len <= 2 or ext.len >= 8){
-			@branchHint(.unlikely); // This can only happen once, so we hint it as unlikely.
-			
-			// We also need to move the reader's seek position back, otherwise EVERY file read 
-			// gets shifted forward.
-			gpak_reader.seek -= 2 + filepath_len;
-			
-			break;
-		}
+	const dictionary: Dictionary = try .read(gpak_reader, alc);
+	defer dictionary.deinit(alc);
+	
+	for(dictionary.entries) |entry| {
+		const filepath = entry.path[0..entry.path_length];
 		
 		// Tiftid 16/Feb/2026:
 		// Iterate through the add filepaths, and test for equality.
@@ -780,19 +828,6 @@ pub fn patch(
 		};
 		
 		try file_write_flags.append(alc, !is_override and !is_remove);
-		
-		// Dupe the filepath and shove it into the ArrayList.
-		// This is so the memory doesn't get stolen out from under our feet as the reader 
-		// forgets about this part of the file later.
-		// 
-		// We also have to do this BEFORE reading the file length, because if we don't, we get very 
-		// strange errors which are related to the reader calling .rebase() and rug-pulling this 
-		// memory out from under us.
-		try file_paths.append(alc, try alc.dupe(u8, filepath));
-		
-		const file_length = try gpak_reader.takeInt(u32, .little);
-		
-		try file_lengths.append(alc, file_length);
 	}
 	
 	if(flags.notify_on_failed_override){
@@ -840,18 +875,12 @@ pub fn patch(
 		try writer.writeInt(u32, @intCast(length), .little);
 	}
 	
-	for(file_paths.items, file_lengths.items, file_write_flags.items) |filepath, file_length, write| {
+	for(dictionary.entries, file_write_flags.items) |entry, write| {
 		if(!write) continue;
-		if(filepath.len > std.math.maxInt(u16)){
-			@branchHint(.unlikely);
-			std.log.err("FATAL ERROR: Original gpak file path {s} is too long!", .{
-				filepath,
-			});
-			return error.PatchUnmodifiedPathTooLong;
-		}
-		try writer.writeInt(u16, @intCast(filepath.len), .little);
-		try writer.writeAll(filepath);
-		try writer.writeInt(u32, file_length, .little);
+		
+		try writer.writeInt(u16, entry.path_length, .little);
+		try writer.writeAll(entry.path[0..entry.path_length]);
+		try writer.writeInt(u32, entry.file_length, .little);
 	}
 	
 	for(patch_zon.override) |filepath| {
@@ -942,8 +971,10 @@ pub fn patch(
 		try stream_reader_to_writer(reader, writer, @intCast(length));
 	}
 	
-	for(file_paths.items, file_lengths.items, file_write_flags.items) |filepath, file_length, write| {
+	for(dictionary.entries, file_write_flags.items) |entry, write| {
 		defer progress.completeOne();
+		
+		const filepath = entry.path[0..entry.path_length];
 		// Set the child node's name to the path of the current file.
 		@memcpy(
 			progress_filename_buf[0..@min(filepath.len, std.Progress.Node.max_name_len)],
@@ -955,14 +986,14 @@ pub fn patch(
 		
 		// Read the file and stream it to the temp file.
 		if(write){
-			try stream_reader_to_writer(gpak_reader, writer, file_length);
+			try stream_reader_to_writer(gpak_reader, writer, entry.file_length);
 		} else {
 			// Stream the file into a dummy writer, if we're not writing it.
 			// Somehow gpak_reader.toss(file_length) was always causing error.EndOfStream, no matter 
 			// what I tried.
 			var dummy_buffer: [IO_BUFFER_SIZE]u8 = undefined;
 			var dummy: std.Io.Writer.Discarding = .init(&dummy_buffer);
-			try stream_reader_to_writer(gpak_reader, &dummy.writer, file_length);
+			try stream_reader_to_writer(gpak_reader, &dummy.writer, entry.file_length);
 		}
 	}
 	
@@ -1002,23 +1033,315 @@ pub fn patch(
 	}
 }
 
-/// Tiftid 15/Feb/2026:
-/// Generic helper function for streaming from a reader to a writer.
-/// There are dedicated standard library functions for this, but they all failed me for some reason.
-pub fn stream_reader_to_writer(
-	reader: *std.Io.Reader,
-	writer: *std.Io.Writer,
-	length: usize,
-) (std.Io.Reader.Error || std.Io.Writer.Error)!void {
-	// Stream the input to the output, IO_BUFFER_SIZE bytes at a time.
-	var chunk_prev: usize = undefined;
-	var chunk: usize = 0;
-	while(chunk != length){
-		chunk_prev = chunk;
-		chunk = @min(length, chunk + IO_BUFFER_SIZE);
-		_ = try writer.write(try reader.take(chunk - chunk_prev));
-		try writer.flush();
+/// Tiftid 21/Feb/2026:
+/// Utility for diffing two gpak files and saving the result to a ZON file in the output directory.
+/// The two files are diffed as follows:
+/// - Any added files are saved into the output directory, and their filepath is recorded
+/// - Any removed files are NOT saved, and their filepath and length are recorded
+/// - Any changed files have the new versions saved into the output directory, with the old length 
+/// being recorded
+/// This is a very simplistic diff util, but it should do the job for our purposes.
+pub fn diff(
+	io: std.Io, alc: std.mem.Allocator,
+	first_gpak: std.Io.File, second_gpak: std.Io.File,
+	output_dir: std.Io.Dir,
+) !void {
+	// First, create the output ZON file in the output directory and create a serializer for it.
+	const zonfile = try output_dir.createFile(io, "diff.zon", .{});
+	defer zonfile.close(io);
+	var zonfile_writer_buffer: [IO_BUFFER_SIZE]u8 = undefined;
+	var zonfile_writer = zonfile.writer(io, &zonfile_writer_buffer);
+	const zon_writer: *std.Io.Writer = &zonfile_writer.interface;
+	
+	var zon: std.zon.Serializer = .{
+		.writer = zon_writer,
+	};
+	var zon_root = try zon.beginStruct(.{});
+	
+	// Record the semantic version of this utility into the ZON file.
+	{
+		const version = try std.fmt.allocPrint(alc, "{f}", .{options.version});
+		defer alc.free(version);
+		try zon_root.field("gpak_util_version", version, .{});
 	}
+	
+	// Extract the relevant information from the gpak file directories.
+	// Fast map of filename to dictionary index.
+	var first_file_table: std.StringArrayHashMap(u32) = .init(alc);
+	defer first_file_table.deinit();
+	try first_file_table.ensureTotalCapacity(20000);
+	
+	// We use the world's most munted system, where we make the reader pointer a variable, so 
+	// once we're done reading the first file, we can just update it with the address of the second 
+	// file's reader, and vice versa.
+	var first_reader_buffer: [IO_BUFFER_SIZE]u8 = undefined;
+	var first_reader = first_gpak.reader(io, &first_reader_buffer);
+	
+	var reader: *std.Io.Reader = &first_reader.interface;
+	
+	// Unlike in other modes, it's not really an error if we get a header truth value which has a bad
+	// version here.
+	// It IS an error if we can't parse a header truth value at all, though.
+	const first_header_version: HeaderVersion = try .parse_from_truth(try reader.take(2));
+	reader.toss(2); // Skip past the two 0-bytes.
+	
+	// Read the file dictionary.
+	const first_dictionary: Dictionary = try .read(reader, alc);
+	defer first_dictionary.deinit(alc);
+	
+	// Give the user feedback that the application is actually working towards something- 
+	// it just takes a while!
+	const progress: std.Progress.Node = std.Progress.start(io, .{
+		.refresh_rate_ns = .fromSeconds(1 / 120), // Update at 120 FPS if possible
+	});
+	defer progress.end();
+	
+	progress.setName("1st gpak: calculating hashes");
+	progress.setEstimatedTotalItems(first_dictionary.entries.len);
+	
+	// We also make a child node, just so we can display which file is currently being checksummed.
+	var progress_filename_buf: [std.Progress.Node.max_name_len]u8 = undefined;
+	const progress_filename: std.Progress.Node = progress.start("", 0);
+	defer progress_filename.end();
+	
+	var first_hashes: std.ArrayList(u64) = try .initCapacity(alc, 20000);
+	defer first_hashes.deinit(alc);
+	
+	// Loop over the dictionary entries and use them to construct our hash map.
+	// Also construct a list of checksums so we can ascertain which files have been changed.
+	for(first_dictionary.entries, 0..) |entry, i| {
+		defer progress.completeOne();
+		const filepath = entry.path[0..entry.path_length];
+		// Set the child node's name to the path of the current file.
+		@memcpy(
+			progress_filename_buf[0..@min(filepath.len, std.Progress.Node.max_name_len)],
+			filepath[0..@min(filepath.len, std.Progress.Node.max_name_len)],
+		);
+		progress_filename.setName(
+			progress_filename_buf[0..@min(filepath.len, std.Progress.Node.max_name_len)],
+		);
+		
+		try first_file_table.put(entry.path[0..entry.path_length], @intCast(i));
+		
+		const hash_buf = try alc.alloc(u8, entry.file_length);
+		defer alc.free(hash_buf);
+		
+		// Read the file into the hash buffer, then hash it.
+		var writer: std.Io.Writer = .fixed(hash_buf);
+		try stream_reader_to_writer(reader, &writer, entry.file_length);
+		
+		try first_hashes.append(alc, std.hash.Fnv1a_64.hash(hash_buf));
+	}
+	
+	// Reset the reader.
+	var second_reader_buffer: [IO_BUFFER_SIZE]u8 = undefined;
+	var second_reader = second_gpak.reader(io, &second_reader_buffer);
+	reader = &second_reader.interface;
+	
+	// Fast map of filename to dictionary index.
+	var second_file_table: std.StringArrayHashMap(u32) = .init(alc);
+	defer second_file_table.deinit();
+	try second_file_table.ensureTotalCapacity(20000);
+	
+	// Unlike in other modes, it's not really an error if we get a header truth value which has a bad
+	// version here.
+	// It IS an error if we can't parse a header truth value at all, though.
+	const second_header_version: HeaderVersion = try .parse_from_truth(try reader.take(2));
+	reader.toss(2); // Skip past the two 0-bytes.
+	
+	// If the first and second header have different versions, record it in the ZON file.
+	if(first_header_version != second_header_version){
+		try zon_root.field("header_diff", .{
+			.old = first_header_version.truth(),
+			.new = second_header_version.truth(),
+		}, .{});
+	}
+	
+	// Read the file dictionary.
+	const second_dictionary: Dictionary = try .read(reader, alc);
+	// Save the file offset after reading the file dictionary so we can skip reading it a second time.
+	const second_data_offset: usize = second_reader.logicalPos();
+	
+	// We purposefully avoid freeing each entry, as that would be a double-free - we free the filepaths 
+	// when they're used as keys in the hash maps anyway.
+	defer second_dictionary.deinit(alc);
+	
+	progress.setCompletedItems(0);
+	progress.setName("2nd gpak: calculating hashes");
+	progress.setEstimatedTotalItems(second_dictionary.entries.len);
+	
+	var second_hashes: std.ArrayList(u64) = try .initCapacity(alc, 20000);
+	defer second_hashes.deinit(alc);
+	
+	// Loop over the dictionary entries and use them to construct our hash map.
+	for(second_dictionary.entries, 0..) |entry, i| {
+		defer progress.completeOne();
+		const filepath = entry.path[0..entry.path_length];
+		// Set the child node's name to the path of the current file.
+		@memcpy(
+			progress_filename_buf[0..@min(filepath.len, std.Progress.Node.max_name_len)],
+			filepath[0..@min(filepath.len, std.Progress.Node.max_name_len)],
+		);
+		progress_filename.setName(
+			progress_filename_buf[0..@min(filepath.len, std.Progress.Node.max_name_len)],
+		);
+		
+		try second_file_table.put(entry.path[0..entry.path_length], @intCast(i));
+		
+		const hash_buf = try alc.alloc(u8, entry.file_length);
+		defer alc.free(hash_buf);
+		
+		// Read the file into the hash buffer, then hash it.
+		var writer: std.Io.Writer = .fixed(hash_buf);
+		try stream_reader_to_writer(reader, &writer, entry.file_length);
+		
+		try second_hashes.append(alc, std.hash.Fnv1a_64.hash(hash_buf));
+	}
+	
+	var added_files: std.ArrayList([]const u8) = .empty;
+	defer added_files.deinit(alc);
+	var removed_files: std.ArrayList(struct{
+		path: []const u8,
+		length: u32,
+	}) = .empty;
+	defer removed_files.deinit(alc);
+	var changed_files: std.ArrayList(struct{
+		path: []const u8,
+		old_length: u32,
+	}) = .empty;
+	defer changed_files.deinit(alc);
+	
+	// Now, we begin diffing.
+	for(first_dictionary.entries, 0..) |entry, i| {
+		const filepath = entry.path[0..entry.path_length];
+		// If the filepath isn't present in the second dictionary, we know this is a removed file.
+		if(!second_file_table.contains(filepath)){
+			try removed_files.append(alc, .{
+				.path = filepath,
+				.length = entry.file_length,
+			});
+		} else {
+			// If the filepath is present in both dictionaries, but the lengths or hashes differ, we 
+			// know this is a changed file.
+			const second_i = second_file_table.get(filepath).?;
+			
+			if(
+				first_dictionary.entries[i].file_length !=
+				second_dictionary.entries[second_i].file_length
+				or
+				first_hashes.items[i] != 
+				second_hashes.items[second_i]
+			){
+				try changed_files.append(alc, .{
+					.path = filepath,
+					.old_length = entry.file_length,
+				});
+			}
+		}
+	}
+	
+	for(second_dictionary.entries) |entry| {
+		const filepath = entry.path[0..entry.path_length];
+		// If the filepath isn't present in the second dictionary, we know this is an added file.
+		if(!first_file_table.contains(filepath)){
+			try added_files.append(alc, filepath);
+		}
+	}
+	
+	progress.setCompletedItems(0);
+	progress.setName("Saving added and changed files");
+	progress.setEstimatedTotalItems(added_files.items.len + changed_files.items.len);
+	
+	// Save the added and changed files to the output directory.
+	try second_reader.seekTo(second_data_offset);
+	write_loop: for(second_dictionary.entries) |entry| {
+		const filepath = entry.path[0..entry.path_length];
+		for(added_files.items) |add| {
+			if(std.mem.eql(u8, add, filepath)){
+				defer progress.completeOne();
+				// Set the child node's name to the path of the current file.
+				@memcpy(
+					progress_filename_buf[0..@min(filepath.len, std.Progress.Node.max_name_len)],
+					filepath[0..@min(filepath.len, std.Progress.Node.max_name_len)],
+				);
+				progress_filename.setName(
+					progress_filename_buf[0..@min(filepath.len, std.Progress.Node.max_name_len)],
+				);
+				
+				// Save it to the host filesystem.
+				if(std.fs.path.dirname(filepath)) |filepath_dir| {
+					// Make the subdirectories required to hold the output file.
+					try output_dir.createDirPath(io, filepath_dir);
+				} else {
+					// Individual files at the root of the GPAK are unlikely, so this is a cold path.
+					@branchHint(.cold);
+				}
+				
+				const file = try output_dir.createFile(io, filepath, .{});
+				defer file.close(io);
+				
+				var file_writer_buffer: [IO_BUFFER_SIZE]u8 = undefined;
+				var file_writer = file.writer(io, &file_writer_buffer);
+				const writer: *std.Io.Writer = &file_writer.interface;
+				
+				try stream_reader_to_writer(reader, writer, entry.file_length);
+				continue :write_loop;
+			}
+		}
+		
+		for(changed_files.items) |changed| {
+			if(std.mem.eql(u8, changed.path, filepath)){
+				defer progress.completeOne();
+				// Set the child node's name to the path of the current file.
+				@memcpy(
+					progress_filename_buf[0..@min(filepath.len, std.Progress.Node.max_name_len)],
+					filepath[0..@min(filepath.len, std.Progress.Node.max_name_len)],
+				);
+				progress_filename.setName(
+					progress_filename_buf[0..@min(filepath.len, std.Progress.Node.max_name_len)],
+				);
+				
+				// Save it to the host filesystem.
+				if(std.fs.path.dirname(filepath)) |filepath_dir| {
+					// Make the subdirectories required to hold the output file.
+					try output_dir.createDirPath(io, filepath_dir);
+				} else {
+					// Individual files at the root of the GPAK are unlikely, so this is a cold path.
+					@branchHint(.cold);
+				}
+				
+				const file = try output_dir.createFile(io, filepath, .{});
+				defer file.close(io);
+				
+				var file_writer_buffer: [IO_BUFFER_SIZE]u8 = undefined;
+				var file_writer = file.writer(io, &file_writer_buffer);
+				const writer: *std.Io.Writer = &file_writer.interface;
+				
+				try stream_reader_to_writer(reader, writer, entry.file_length);
+				continue :write_loop;
+			}
+		}
+		
+		// Stream the file into a dummy writer, if we're not writing it.
+		// Somehow, pushing the reader's seek forward manually causes error.EndOfStream, no matter what.
+		var dummy_buffer: [IO_BUFFER_SIZE]u8 = undefined;
+		var dummy: std.Io.Writer.Discarding = .init(&dummy_buffer);
+		try stream_reader_to_writer(reader, &dummy.writer, entry.file_length);
+	}
+	
+	try zon_root.field("added_files", added_files.items, .{});
+	try zon_writer.flush();
+	
+	try zon_root.field("removed_files", removed_files.items, .{});
+	try zon_writer.flush();
+	
+	try zon_root.field("changed_files", changed_files.items, .{});
+	try zon_writer.flush();
+	
+	// Sadly, we can't defer this, as using try inside a defer statement is a compile-error.
+	try zon_root.end();
+	
+	try zon_writer.flush();
 }
 
 /// Print program usage to stdout.
@@ -1046,6 +1369,9 @@ pub fn usage() void {
 		\\  notify_on_failed_override
 		\\    Log a message whenever the gpak is missing a corresponding entry for one of the patch's
 		\\    override files.
+		\\OR
+		\\<diff>
+		\\  <path to first gpak> <path to second gpak> <path to output directory>
 		\\
 		\\From 21/Feb/2026, the following flag is available in all modes:
 		\\  header_version=<number>
