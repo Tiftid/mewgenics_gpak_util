@@ -15,10 +15,12 @@ const Mode = enum{
 /// Command-line flags for patch mode.
 const PatchFlags = struct{
 	no_delete_temp: bool = false,
+	notify_on_failed_add: bool = false,
+	notify_on_failed_override: bool = false,
 };
 
 /// Tiftid 15/Feb/2026:
-/// The size of std.Io.Reader and std.Io.Writer buffers we'll be using.
+/// The size of the std.Io.Reader and std.Io.Writer buffers we'll be using.
 const IO_BUFFER_SIZE = 4096;
 
 /// Tiftid 15/Feb/2026:
@@ -29,12 +31,44 @@ pub const PatchZon = struct{
 	/// Used to assert forwards- or backwards-compatibility.
 	version: []const u8,
 	/// Filepaths (relative to patch root) to add to the gpak.
+	/// TODO: We should likely pre-iterate the gpak directory, so we can ascertain if the file to add 
+	/// is already in there, and avoid adding it multiple times to the same gpak.
 	add: []const []const u8,
 	/// Filepaths (relative to gpak root) to completely remove from the gpak.
 	remove: []const []const u8,
 	/// Filepath relative to gpak root to replace.
 	/// Expects that the replacement has the same filepath relative to patch root.
 	override: []const []const u8,
+};
+
+/// Tiftid 21/Feb/2026:
+/// Tyler for some reason decided to change the gpak header to start with a backtick instead of a 
+/// backslash, possibly to make parsing it actually easier or to avoid conflicts with some other filetype.
+/// This makes things messy for me as I now need to maintain backwards-compatibility.
+pub const HeaderVersion = enum(u32){
+	/// Header begins with \H; gpak file is from before 21/Feb/2026
+	@"1" = 1,
+	/// Header begins with `H; gpak file is from after 21/Feb/2026
+	@"2",
+	
+	/// Get the comptime-known truth value of the header for a given header version.
+	/// Given as an ASCII slice.
+	pub fn truth(self: @This()) []const u8 {
+		return switch(self){
+			.@"1" => "\\H",
+			.@"2" => "`H",
+		};
+	}
+	
+	/// Attempt to parse a header version from a buffer.
+	pub fn parse(buffer: []const u8) std.fmt.ParseIntError!@This() {
+		const int = try std.fmt.parseInt(
+			@typeInfo(@This()).@"enum".tag_type,
+			buffer,
+			10,
+		);
+		return std.enums.fromInt(@This(), int) orelse error.Overflow;
+	}
 };
 
 /// Modified by Tiftid 14/Feb/2026 (St. Valentine's Day):
@@ -57,6 +91,7 @@ pub fn main(init: std.process.Init) !void {
 				break :blk comptime @field(Mode, field.name);
 			}
 		}
+		
 		return usage(); // Wrong mode specified
 	};
 	
@@ -66,6 +101,22 @@ pub fn main(init: std.process.Init) !void {
 			// Output directory is allowed to be null.
 			// If it is, we'll just output in the same folder this executable is running in.
 			const out_path = args.next();
+			
+			// Iterate over the flags to attempt to ascertain the header version.
+			// If we notice it's unspecified, assume the user wants version 2.
+			var header_version: HeaderVersion = .@"2";
+			while(args.next()) |flag| {
+				const flag_name = std.mem.sliceTo(flag, '=');
+				if(std.mem.eql(u8, flag_name, "header_version")){
+					header_version = HeaderVersion.parse(flag[flag_name.len + 1..]) catch |e| {
+						std.log.err("{t}: Failed to parse \"{s}\" as a header version!", .{
+							e, flag[flag_name.len + 1..],
+						});
+						return e;
+					};
+					break;
+				}
+			}
 			
 			// Try to open the GPAK file.
 			const gpak: std.Io.File = std.Io.Dir.openFileAbsolute(io, gpak_path, .{}) catch |e| {
@@ -87,11 +138,27 @@ pub fn main(init: std.process.Init) !void {
 			;
 			defer output_dir.close(io);
 			
-			try unpack(io, alc, gpak, output_dir);
+			try unpack(io, alc, gpak, output_dir, header_version);
 		},
 		.pack => {
 			const in_path = args.next() orelse return usage();
 			const gpak_path = args.next() orelse return usage();
+			
+			// Iterate over the flags to attempt to ascertain the header version.
+			// If we notice it's unspecified, assume the user wants version 2.
+			var header_version: HeaderVersion = .@"2";
+			while(args.next()) |flag| {
+				const flag_name = std.mem.sliceTo(flag, '=');
+				if(std.mem.eql(u8, flag_name, "header_version")){
+					header_version = HeaderVersion.parse(flag[flag_name.len + 1..]) catch |e| {
+						std.log.err("{t}: Failed to parse \"{s}\" as a header version!", .{
+							e, flag[flag_name.len + 1..],
+						});
+						return e;
+					};
+					break;
+				}
+			}
 			
 			// Try to open the input directory.
 			const input_dir = std.Io.Dir.openDirAbsolute(io, in_path, .{
@@ -146,7 +213,7 @@ pub fn main(init: std.process.Init) !void {
 				
 				const directory_writer: *std.Io.Writer = &directory_alloc.writer;
 				
-				try pack(io, alc, input_dir, temp, directory_writer);
+				try pack(io, alc, input_dir, temp, directory_writer, header_version);
 				
 				// Now that we've written to the directory, we construct a reader from its owned slice, 
 				// and stream that reader into the gpak writer.
@@ -189,12 +256,24 @@ pub fn main(init: std.process.Init) !void {
 			const gpak_path = args.next() orelse return usage();
 			
 			var flags: PatchFlags = .{};
+			var header_version: HeaderVersion = .@"2";
 			while(args.next()) |flag| {
 				inline for(std.meta.fields(PatchFlags)) |field| {
 					if(std.mem.eql(u8, flag, field.name)){
 						// std.log.info("{s}: Flag enabled!", .{field.name}); // sponge
 						@field(flags, field.name) = true;
 					}
+				}
+				
+				const flag_name = std.mem.sliceTo(flag, '=');
+				if(std.mem.eql(u8, flag_name, "header_version")){
+					header_version = HeaderVersion.parse(flag[flag_name.len + 1..]) catch |e| {
+						std.log.err("{t}: Failed to parse \"{s}\" as a header version!", .{
+							e, flag[flag_name.len + 1..],
+						});
+						return e;
+					};
+					break;
 				}
 			}
 			
@@ -236,7 +315,7 @@ pub fn main(init: std.process.Init) !void {
 			errdefer temp.close(io);
 			
 			// Indented so we close the temp file before we attempt to reopen it.
-			try patch(io, alc, gpak, temp, patch_dir);
+			try patch(io, alc, gpak, temp, patch_dir, flags, header_version);
 			
 			temp.close(io);
 			gpak.close(io);
@@ -260,6 +339,7 @@ pub fn main(init: std.process.Init) !void {
 pub fn unpack(
 	io: std.Io, alc: std.mem.Allocator,
 	gpak: std.Io.File, output_dir: std.Io.Dir,
+	header_version: HeaderVersion,
 ) !void {
 	// GPAK filepaths and their associated file lengths.
 	var file_paths: std.ArrayList([]const u8) = .empty;
@@ -280,14 +360,18 @@ pub fn unpack(
 	// Begin reading the GPAK file.
 	// Assert that the header is "\H" followed by two 0 bytes.
 	const header_ascii = try reader.take(2);
-	if(!std.mem.eql(u8, header_ascii, "\\H")){
-		std.log.warn("Expected GPAK file to start with \"\\H\", but it didn't!", .{});
+	if(!std.mem.eql(u8, header_ascii, header_version.truth())){
+		std.log.err("FATAL ERROR: Expected gpak file to start with {s}, found {s}!", .{
+			header_version.truth(),
+			header_ascii,
+		});
 		return error.GpakWrongHeader;
 	}
-	const header_remaining = try reader.takeInt(u16, .little);
-	if(header_remaining != 0){
-		std.log.warn("Expected GPAK file to have two 0-bytes following \"\\H\", but it didn't!", .{});
-		return error.GpakWrongHeader;
+	const header_padding = try reader.takeInt(u16, .little);
+	if(header_padding != 0){
+		std.log.warn("Header should have had two 0-bytes after {s}, but it didn't!", .{
+			header_version.truth(),
+		});
 	}
 	
 	// Now that we've parsed the header, we can begin parsing the virtual filesystem.
@@ -399,6 +483,7 @@ pub fn pack(
 	temp: std.Io.File,
 	/// The writer for the directory.
 	writer: *std.Io.Writer,
+	header_version: HeaderVersion,
 ) !void {
 	// GPAK filepaths and their associated file lengths.
 	var file_paths: std.ArrayList([]const u8) = .empty;
@@ -484,6 +569,8 @@ pub fn pack(
 		try file_lengths.append(alc, @intCast(length));
 		
 		// Before we store the path name, convert back-slashes to forward-slashes.
+		// Back-slashes would crash Mewgenics on launch with no error message, possibly due to being 
+		// interpreted as escape characters.
 		const filename_copy = try alc.dupe(u8, entry.path);
 		std.mem.replaceScalar(u8, filename_copy, '\\', '/');
 		try file_paths.append(alc, filename_copy);
@@ -499,7 +586,7 @@ pub fn pack(
 		try stream_reader_to_writer(reader, temp_writer, @intCast(length));
 	}
 	
-	_ = try writer.write("\\H");
+	_ = try writer.write(header_version.truth());
 	try writer.writeInt(u16, 0, .little);
 	
 	// Loop over the file paths and lengths, writing them after the header.
@@ -518,6 +605,8 @@ pub fn patch(
 	gpak: std.Io.File,
 	temp: std.Io.File,
 	patch_dir: std.Io.Dir,
+	flags: PatchFlags,
+	header_version: HeaderVersion,
 ) !void {
 	// First of all, attempt to read the patch file as ZON.
 	const patch_file = patch_dir.openFile(io, "patch.zon", .{}) catch |e| {
@@ -559,51 +648,38 @@ pub fn patch(
 	
 	// Added files.
 	// The filepaths are already held by the ZON memory.
-	var add_file_lengths: std.ArrayList(u32) = .empty;
-	defer add_file_lengths.deinit(alc);
+	// 
+	// Tiftid 16/Feb/2026:
+	// New system; when we're iterating over the original file's directory, if we find that an 
+	// add file is already present, we set its flag in this slice to false.
+	// This prevents us from writing it into the temp file.
+	const add_file_write_flags = try alc.alloc(bool, patch_zon.add.len);
+	defer alc.free(add_file_write_flags);
+	@memset(add_file_write_flags, true); // Initialise as all-true
 	
-	var file_paths: std.ArrayList([]const u8) = .empty;
+	var file_paths: std.ArrayList([]const u8) = try .initCapacity(alc, 20000);
 	defer {
 		for(file_paths.items) |filepath| {
 			alc.free(filepath);
 		}
 		file_paths.deinit(alc);
 	}
-	var file_lengths: std.ArrayList(u32) = .empty;
+	var file_lengths: std.ArrayList(u32) = try .initCapacity(alc, 20000);
 	defer file_lengths.deinit(alc);
 	// Whether or not this file should be written into the output gpak.
-	var file_write_flags: std.ArrayList(bool) = .empty;
+	var file_write_flags: std.ArrayList(bool) = try .initCapacity(alc, 20000);
 	defer file_write_flags.deinit(alc);
 	
 	// Overwritten files.
 	// The filepaths are already held by the ZON memory.
-	var override_file_lengths: std.ArrayList(u32) = .empty;
-	defer override_file_lengths.deinit(alc);
-	
-	// Begin writing the add directory entries.
-	for(patch_zon.add) |add_path| {
-		const file = patch_dir.openFile(io, add_path, .{}) catch |e| {
-			std.log.err("{t}: Failed to open patch file {s}!", .{
-				e, add_path,
-			});
-			return e;
-		};
-		defer file.close(io);
-		
-		// Stat the file to ascertain its length.
-		// Return an error if it's too long to fit into a u32.
-		const file_length = try file.length(io);
-		if(file_length > std.math.maxInt(u32)){
-			@branchHint(.unlikely);
-			std.log.err("FATAL ERROR: Patch add file {s} is too long!", .{
-				add_path,
-			});
-			return error.PatchAddFileTooLong;
-		}
-		
-		// Finally, write the directory entry into the add file entries.
-		try add_file_lengths.append(alc, @intCast(file_length));
-	}
+	// 
+	// Tiftid 16/Feb/2026:
+	// We have a new guardrail; if an override file doesn't have a corresponding entry in the gpak, we 
+	// add it to the gpak anyway.
+	// The old behaviour was to do nothing in this case.
+	const override_file_exists = try alc.alloc(bool, patch_zon.override.len);
+	@memset(override_file_exists, false);
+	defer alc.free(override_file_exists);
 	
 	// Begin iterating over the original directory, and differentiating between unmodified and overriden
 	// files.
@@ -613,14 +689,18 @@ pub fn patch(
 	
 	// Assert that the header is "\H" followed by two 0 bytes.
 	const header_ascii = try gpak_reader.take(2);
-	if(!std.mem.eql(u8, header_ascii, "\\H")){
-		std.log.warn("Expected GPAK file to start with \"\\H\", but it didn't!", .{});
+	if(!std.mem.eql(u8, header_ascii, header_version.truth())){
+		std.log.err("FATAL ERROR: Expected gpak file to start with {s}, found {s}!", .{
+			header_version.truth(),
+			header_ascii,
+		});
 		return error.GpakWrongHeader;
 	}
-	const header_version = try gpak_reader.takeInt(u16, .little);
-	if(header_version != 0){
-		std.log.warn("Expected GPAK file to have two 0-bytes following \"\\H\", but it didn't!", .{});
-		return error.GpakWrongHeader;
+	const header_padding = try gpak_reader.takeInt(u16, .little);
+	if(header_padding != 0){
+		std.log.warn("Header should have had two 0-bytes after {s}, but it didn't!", .{
+			header_version.truth(),
+		});
 	}
 	
 	while(true){
@@ -654,6 +734,18 @@ pub fn patch(
 			break;
 		}
 		
+		// Tiftid 16/Feb/2026:
+		// Iterate through the add filepaths, and test for equality.
+		// If we find that the add file already exists in the gpak, tell us to not actually add it.
+		for(patch_zon.add, 0..) |patch_filepath, i| {
+			if(std.mem.eql(u8, patch_filepath, filepath)){
+				if(flags.notify_on_failed_add)
+					std.log.info("File {s} already exists in the gpak - not adding it", .{filepath})
+				;
+				add_file_write_flags[i] = false;
+				break;
+			}
+		}
 		// Iterate through the remove filepaths, and test for equality.
 		const is_remove: bool = blk: {
 			for(patch_zon.remove) |remove| {
@@ -666,32 +758,10 @@ pub fn patch(
 		};
 		// Iterate through the override file paths, and test for equality.
 		const is_override: bool = blk: {
-			for(patch_zon.override) |patch_filepath| {
+			for(patch_zon.override, 0..) |patch_filepath, i| {
 				if(std.mem.eql(u8, patch_filepath, filepath)){
 					// std.log.info("Found override file {s}", .{filepath}); // sponge
-					
-					// Write the file entry for the patch file into the override file entries.
-					const file = patch_dir.openFile(io, filepath, .{}) catch |e| {
-						std.log.err("{t}: Failed to open patch file {s}!", .{
-							e, filepath,
-						});
-						return e;
-					};
-					defer file.close(io);
-					
-					// Stat the file to ascertain its length.
-					// Return an error if it's too long to fit into a u32.
-					const file_length = try file.length(io);
-					if(file_length > std.math.maxInt(u32)){
-						@branchHint(.unlikely);
-						std.log.err("FATAL ERROR: Patch override file {s} is too long!", .{
-							filepath,
-						});
-						return error.PatchOverrideFileTooLong;
-					}
-					
-					try override_file_lengths.append(alc, @intCast(file_length));
-					
+					override_file_exists[i] = true;
 					break :blk true;
 				}
 			}
@@ -714,15 +784,26 @@ pub fn patch(
 		try file_lengths.append(alc, file_length);
 	}
 	
+	if(flags.notify_on_failed_override){
+		for(patch_zon.override, override_file_exists) |filepath, exists| {
+			if(!exists) std.log.warn(
+				"Patch override file {s} wasn't found in the gpak! Adding it instead...", .{
+					filepath,
+				}
+			);
+		}
+	}
+	
 	// Begin writing to the temp file.
 	var temp_writer_buffer: [IO_BUFFER_SIZE]u8 = undefined;
 	var temp_writer = temp.writer(io, &temp_writer_buffer);
 	const writer: *std.Io.Writer = &temp_writer.interface;
 	
-	_ = try writer.write("\\H");
+	_ = try writer.write(header_version.truth());
 	try writer.writeInt(u16, 0, .little);
 	
-	for(patch_zon.add, add_file_lengths.items) |filepath, file_length| {
+	for(patch_zon.add, add_file_write_flags) |filepath, write| {
+		if(!write) continue;
 		if(filepath.len > std.math.maxInt(u16)){
 			@branchHint(.unlikely);
 			std.log.err("FATAL ERROR: Patch add file path {s} is too long!", .{
@@ -730,9 +811,22 @@ pub fn patch(
 			});
 			return error.PatchAddPathTooLong;
 		}
+		
+		const file = try patch_dir.openFile(io, filepath, .{});
+		defer file.close(io);
+		
+		const length = try file.length(io);
+		if(length > std.math.maxInt(u32)){
+			@branchHint(.unlikely);
+			std.log.err("FATAL ERROR: Patch add file {s} is too long!", .{
+				filepath,
+			});
+			return error.PatchAddFileTooLong;
+		}
+		
 		try writer.writeInt(u16, @intCast(filepath.len), .little);
 		try writer.writeAll(filepath);
-		try writer.writeInt(u32, @intCast(file_length), .little);
+		try writer.writeInt(u32, @intCast(length), .little);
 	}
 	
 	for(file_paths.items, file_lengths.items, file_write_flags.items) |filepath, file_length, write| {
@@ -746,10 +840,10 @@ pub fn patch(
 		}
 		try writer.writeInt(u16, @intCast(filepath.len), .little);
 		try writer.writeAll(filepath);
-		try writer.writeInt(u32, @intCast(file_length), .little);
+		try writer.writeInt(u32, file_length, .little);
 	}
 	
-	for(patch_zon.override, override_file_lengths.items) |filepath, file_length| {
+	for(patch_zon.override) |filepath| {
 		if(filepath.len > std.math.maxInt(u16)){
 			@branchHint(.unlikely);
 			std.log.err("FATAL ERROR: Patch override file path {s} is too long!", .{
@@ -757,9 +851,22 @@ pub fn patch(
 			});
 			return error.PatchOverridePathTooLong;
 		}
+		
+		const file = try patch_dir.openFile(io, filepath, .{});
+		defer file.close(io);
+		
+		const length = try file.length(io);
+		if(length > std.math.maxInt(u32)){
+			@branchHint(.unlikely);
+			std.log.err("FATAL ERROR: Patch override file {s} is too long!", .{
+				filepath,
+			});
+			return error.PatchOverrideFileTooLong;
+		}
+		
 		try writer.writeInt(u16, @intCast(filepath.len), .little);
 		try writer.writeAll(filepath);
-		try writer.writeInt(u32, @intCast(file_length), .little);
+		try writer.writeInt(u32, @intCast(length), .little);
 	}
 	
 	// Give the user feedback that the application is actually working towards something- 
@@ -772,7 +879,10 @@ pub fn patch(
 	// Calculate the number of files we'll expect to write.
 	// We won't be writing all original files, so we need to reference their write flag.
 	const file_num: usize = blk: {
-		var out: usize = patch_zon.add.len + patch_zon.override.len;
+		var out: usize = patch_zon.override.len;
+		for(add_file_write_flags) |write| {
+			if(write) out += 1;
+		}
 		for(file_write_flags.items) |write| {
 			if(write) out += 1;
 		}
@@ -787,7 +897,8 @@ pub fn patch(
 	const progress_filename: std.Progress.Node = progress.start("", 0);
 	defer progress_filename.end();
 	
-	for(patch_zon.add, add_file_lengths.items) |filepath, file_length| {
+	for(patch_zon.add, add_file_write_flags) |filepath, write| {
+		if(!write) continue;
 		defer progress.completeOne();
 		// Set the child node's name to the path of the current file.
 		@memcpy(
@@ -808,6 +919,8 @@ pub fn patch(
 		};
 		defer file.close(io);
 		
+		const length = try file.length(io);
+		
 		var file_reader_buffer: [IO_BUFFER_SIZE]u8 = undefined;
 		var file_reader = file.reader(io, &file_reader_buffer);
 		const reader: *std.Io.Reader = &file_reader.interface;
@@ -815,7 +928,7 @@ pub fn patch(
 		// If we don't flush here, the writer may refuse to write some of the beginning of the file... 
 		// for some reason.
 		try writer.flush();
-		try stream_reader_to_writer(reader, writer, file_length);
+		try stream_reader_to_writer(reader, writer, @intCast(length));
 	}
 	
 	for(file_paths.items, file_lengths.items, file_write_flags.items) |filepath, file_length, write| {
@@ -842,7 +955,7 @@ pub fn patch(
 		}
 	}
 	
-	for(patch_zon.override, override_file_lengths.items) |filepath, file_length| {
+	for(patch_zon.override) |filepath| {
 		defer progress.completeOne();
 		// Set the child node's name to the path of the current file.
 		@memcpy(
@@ -863,18 +976,18 @@ pub fn patch(
 		};
 		defer file.close(io);
 		
+		const length = try file.length(io);
+		
 		var file_reader_buffer: [IO_BUFFER_SIZE]u8 = undefined;
 		var file_reader = file.reader(io, &file_reader_buffer);
 		const reader: *std.Io.Reader = &file_reader.interface;
 		
-		// If we don't flush here, the writer may refuse to write some of the beginning of the file... 
-		// for some reason.
 		// I have tested and confirmed that omitting the flush() call for the add files causes issues, 
 		// but I haven't done so for this, so you may be able to omit it, since stream_reader_to_writer() 
-		// always flushes after writing every chunk, and we don't mess with the reader in any other way 
+		// always flushes after writing every chunk, and we don't mess with the writer in any other way 
 		// than through calling that function before this block.
-		try writer.flush();
-		try stream_reader_to_writer(reader, writer, file_length);
+		// try writer.flush();
+		try stream_reader_to_writer(reader, writer, @intCast(length));
 	}
 }
 
@@ -917,6 +1030,17 @@ pub fn usage() void {
 		\\  no_delete_temp
 		\\    Leave the gpak file unmodified, and leave the temp file as the patched gpak.
 		\\    Primarily useful for testing.
+		\\  notify_on_failed_add
+		\\    Log a message whenever an add file from the patch already exists in the gpak.
+		\\  notify_on_failed_override
+		\\    Log a message whenever the gpak is missing a corresponding entry for one of the patch's
+		\\    override files.
+		\\
+		\\From 21/Feb/2026, the following flag is available in all modes:
+		\\  header_version=<number>
+		\\     Specify the header version of the gpak file. 2 is the current version, 1 is the old version.
+		\\     This tool now defaults to version 2, so it won't work with old files unless you specify 
+		\\     this flag.
 		, .{
 			options.version,
 		},
