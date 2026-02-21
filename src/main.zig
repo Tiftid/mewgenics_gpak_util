@@ -31,8 +31,6 @@ pub const PatchZon = struct{
 	/// Used to assert forwards- or backwards-compatibility.
 	version: []const u8,
 	/// Filepaths (relative to patch root) to add to the gpak.
-	/// TODO: We should likely pre-iterate the gpak directory, so we can ascertain if the file to add 
-	/// is already in there, and avoid adding it multiple times to the same gpak.
 	add: []const []const u8,
 	/// Filepaths (relative to gpak root) to completely remove from the gpak.
 	remove: []const []const u8,
@@ -51,6 +49,9 @@ pub const HeaderVersion = enum(u32){
 	/// Header begins with `H; gpak file is from after 21/Feb/2026
 	@"2",
 	
+	/// The newest header version.
+	pub const newest = std.enums.values(@This())[std.enums.values(@This()).len - 1];
+	
 	/// Get the comptime-known truth value of the header for a given header version.
 	/// Given as an ASCII slice.
 	pub fn truth(self: @This()) []const u8 {
@@ -60,7 +61,7 @@ pub const HeaderVersion = enum(u32){
 		};
 	}
 	
-	/// Attempt to parse a header version from a buffer.
+	/// Attempt to parse a header version from a buffer containing a string representation of a number.
 	pub fn parse(buffer: []const u8) std.fmt.ParseIntError!@This() {
 		const int = try std.fmt.parseInt(
 			@typeInfo(@This()).@"enum".tag_type,
@@ -68,6 +69,16 @@ pub const HeaderVersion = enum(u32){
 			10,
 		);
 		return std.enums.fromInt(@This(), int) orelse error.Overflow;
+	}
+	
+	/// Attempt to parse a header version from a truth value.
+	/// Returns an error if the given buffer is not exactly 2 bytes long.
+	pub fn parse_from_truth(buffer: []const u8) error{BufferWrongSize, BadTruthValue}!@This() {
+		if(buffer.len != 2) return error.BufferWrongSize;
+		inline for(comptime std.enums.values(@This())) |version| {
+			if(std.mem.eql(u8, buffer, version.truth())) return version;
+		}
+		return error.BadTruthValue;
 	}
 };
 
@@ -103,8 +114,8 @@ pub fn main(init: std.process.Init) !void {
 			const out_path = args.next();
 			
 			// Iterate over the flags to attempt to ascertain the header version.
-			// If we notice it's unspecified, assume the user wants version 2.
-			var header_version: HeaderVersion = .@"2";
+			// If we notice it's unspecified, assume the user wants the newest version.
+			var header_version: HeaderVersion = .newest;
 			while(args.next()) |flag| {
 				const flag_name = std.mem.sliceTo(flag, '=');
 				if(std.mem.eql(u8, flag_name, "header_version")){
@@ -145,8 +156,8 @@ pub fn main(init: std.process.Init) !void {
 			const gpak_path = args.next() orelse return usage();
 			
 			// Iterate over the flags to attempt to ascertain the header version.
-			// If we notice it's unspecified, assume the user wants version 2.
-			var header_version: HeaderVersion = .@"2";
+			// If we notice it's unspecified, assume the user wants the newest version.
+			var header_version: HeaderVersion = .newest;
 			while(args.next()) |flag| {
 				const flag_name = std.mem.sliceTo(flag, '=');
 				if(std.mem.eql(u8, flag_name, "header_version")){
@@ -256,7 +267,7 @@ pub fn main(init: std.process.Init) !void {
 			const gpak_path = args.next() orelse return usage();
 			
 			var flags: PatchFlags = .{};
-			var header_version: HeaderVersion = .@"2";
+			var header_version: HeaderVersion = .newest;
 			while(args.next()) |flag| {
 				inline for(std.meta.fields(PatchFlags)) |field| {
 					if(std.mem.eql(u8, flag, field.name)){

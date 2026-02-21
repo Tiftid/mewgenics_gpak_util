@@ -17,7 +17,7 @@ This makes it a relatively compact way to encode a large archive of files, and a
 ## Modes (command-line interface)
 
 ### Optional flags for all modes (should follow other arguments)
-- header_version=<number>
+- header_version=number
   - Specifies the header version for the gpak file we're reading or writing. Files with version 1 begin with "\H", files with version 2 begin with "`H". This tool considers version 2 the default, so you'll need to specify "header_version=1" to work with old gpaks.
 
 ### unpack
