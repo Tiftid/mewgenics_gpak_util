@@ -1,6 +1,13 @@
 //! Tiftid 11/Feb/2026:
 //! Dump a Mewgenics .gpak file to a directory of real files.
 //! Can also pack a directory into a .gpak file.
+//! 
+//! Tiftid 22/Feb/2026:
+//! I've just been told, and need to relay to you, that the whole "\H" or "`H" thing wasn't header magic 
+//! at all - instead, the first four bytes of the file are a u32 indicating the number of files in the 
+//! gpak! This is completely insane, and while it makes me feel stupid, it also massively simplifies the 
+//! logic involved in unpacking and repacking GPAKs, which makes me feel grateful.
+//! 
 
 const std = @import("std");
 const options = @import("options");
@@ -41,49 +48,6 @@ pub const PatchZon = struct{
 };
 
 /// Tiftid 21/Feb/2026:
-/// Tyler for some reason decided to change the gpak header to start with a backtick instead of a 
-/// backslash, possibly to make parsing it actually easier or to avoid conflicts with some other filetype.
-/// This makes things messy for me as I now need to maintain backwards-compatibility.
-pub const HeaderVersion = enum(u32){
-	/// Header begins with \H; gpak file is from before 21/Feb/2026
-	@"1" = 1,
-	/// Header begins with `H; gpak file is from after 21/Feb/2026
-	@"2",
-	
-	/// The newest header version.
-	pub const newest = std.enums.values(@This())[std.enums.values(@This()).len - 1];
-	
-	/// Get the comptime-known truth value of the header for a given header version.
-	/// Given as an ASCII slice.
-	pub fn truth(self: @This()) []const u8 {
-		return switch(self){
-			.@"1" => "\\H",
-			.@"2" => "`H",
-		};
-	}
-	
-	/// Attempt to parse a header version from a buffer containing a string representation of a number.
-	pub fn parse(buffer: []const u8) std.fmt.ParseIntError!@This() {
-		const int = try std.fmt.parseInt(
-			@typeInfo(@This()).@"enum".tag_type,
-			buffer,
-			10,
-		);
-		return std.enums.fromInt(@This(), int) orelse error.Overflow;
-	}
-	
-	/// Attempt to parse a header version from a truth value.
-	/// Returns an error if the given buffer is not exactly 2 bytes long.
-	pub fn parse_from_truth(buffer: []const u8) error{BufferWrongSize, BadTruthValue}!@This() {
-		if(buffer.len != 2) return error.BufferWrongSize;
-		inline for(comptime std.enums.values(@This())) |version| {
-			if(std.mem.eql(u8, buffer, version.truth())) return version;
-		}
-		return error.BadTruthValue;
-	}
-};
-
-/// Tiftid 21/Feb/2026:
 /// Struct representing the file dictionary of a GPAK file.
 /// Assumes that the slice of entries is heap-allocated.
 pub const Dictionary = struct{
@@ -93,13 +57,13 @@ pub const Dictionary = struct{
 	/// Read a dictionary from a gpak file reader.
 	/// Assumes that the reader has already sought past the file header.
 	/// Optionally also takes a user-provided function to call on each entry.
-	pub fn read(reader: *std.Io.Reader, alc: std.mem.Allocator) !@This() {
-		var entries: std.ArrayList(Entry) = .empty;
-		while(try Entry.read(reader, alc)) |entry| {
-			try entries.append(alc, entry);
+	pub fn read(reader: *std.Io.Reader, alc: std.mem.Allocator, file_num: u32) !@This() {
+		const entries = try alc.alloc(Entry, file_num);
+		for(0..file_num) |i| {
+			entries[i] = try .read(reader, alc);
 		}
 		return .{
-			.entries = try entries.toOwnedSlice(alc),
+			.entries = entries,
 		};
 	}
 	
@@ -121,39 +85,13 @@ pub const Dictionary = struct{
 		/// Read a dictionary entry from a stream.
 		/// We take an allocator as input to dupe the filepath, meaning that this struct allocates 
 		/// memory and should have .deinit(allocator) called on it eventually.
-		/// 
-		/// If this function returns null instead of an error, it means that the end of the file dict 
-		/// has been reached, and the reader's seek has been adjusted to point at the start of the file 
-		/// data.
 		pub fn read(reader: *std.Io.Reader, alc: std.mem.Allocator) (
 			std.Io.Reader.Error ||
 			std.mem.Allocator.Error
-		)!?@This() {
+		)!@This() {
 			const filepath_len = try reader.takeInt(u16, .little);
-			// Tiftid 15/Feb/2026:
-			// We break if the filepath length is longer than the length of the reader's buffer, as that 
-			// would be a ridiculously long filepath and likely indicates the end of this block.
-			if(filepath_len > IO_BUFFER_SIZE){
-				@branchHint(.unlikely);
-				
-				// We also need to move the reader's seek position back 2, otherwise EVERY file read 
-				// gets shifted forward by two bytes.
-				reader.seek -= 2;
-				return null;
-			}
 			
 			const filepath = try reader.take(filepath_len);
-			// Tiftid 15/Feb/2026:
-			// New system for ascertaining where this block ends; we just parse the filepath exactly as 
-			// it's given to us, and if it doesn't look like it ends with a file extension, we break.
-			const ext = std.fs.path.extension(filepath);
-			// The longest file extension in Mewgenics is ".shader"
-			if(ext.len <= 2 or ext.len >= 8){
-				@branchHint(.unlikely);
-				
-				reader.seek -= 2 + filepath_len;
-				return null;
-			}
 			const allocated_filepath = try alc.dupe(u8, filepath);
 			
 			const file_length = try reader.takeInt(u32, .little);
@@ -232,22 +170,6 @@ pub fn main(init: std.process.Init) !void {
 			// If it is, we'll just output in the same folder this executable is running in.
 			const out_path = args.next();
 			
-			// Iterate over the flags to attempt to ascertain the header version.
-			// If we notice it's unspecified, assume the user wants the newest version.
-			var header_version: HeaderVersion = .newest;
-			while(args.next()) |flag| {
-				const flag_name = std.mem.sliceTo(flag, '=');
-				if(std.mem.eql(u8, flag_name, "header_version")){
-					header_version = HeaderVersion.parse(flag[flag_name.len + 1..]) catch |e| {
-						std.log.err("{t}: Failed to parse \"{s}\" as a header version!", .{
-							e, flag[flag_name.len + 1..],
-						});
-						return e;
-					};
-					break;
-				}
-			}
-			
 			// Try to open the GPAK file.
 			const gpak: std.Io.File = std.Io.Dir.openFileAbsolute(io, gpak_path, .{}) catch |e| {
 				std.log.err("{t}: Failed to open {s}!", .{e, gpak_path});
@@ -268,27 +190,11 @@ pub fn main(init: std.process.Init) !void {
 			;
 			defer output_dir.close(io);
 			
-			try unpack(io, alc, gpak, output_dir, header_version);
+			try unpack(io, alc, gpak, output_dir);
 		},
 		.pack => {
 			const in_path = args.next() orelse return usage();
 			const gpak_path = args.next() orelse return usage();
-			
-			// Iterate over the flags to attempt to ascertain the header version.
-			// If we notice it's unspecified, assume the user wants the newest version.
-			var header_version: HeaderVersion = .newest;
-			while(args.next()) |flag| {
-				const flag_name = std.mem.sliceTo(flag, '=');
-				if(std.mem.eql(u8, flag_name, "header_version")){
-					header_version = HeaderVersion.parse(flag[flag_name.len + 1..]) catch |e| {
-						std.log.err("{t}: Failed to parse \"{s}\" as a header version!", .{
-							e, flag[flag_name.len + 1..],
-						});
-						return e;
-					};
-					break;
-				}
-			}
 			
 			// Try to open the input directory.
 			const input_dir = std.Io.Dir.openDirAbsolute(io, in_path, .{
@@ -343,7 +249,7 @@ pub fn main(init: std.process.Init) !void {
 				
 				const directory_writer: *std.Io.Writer = &directory_alloc.writer;
 				
-				try pack(io, alc, input_dir, temp, directory_writer, header_version);
+				try pack(io, alc, input_dir, temp, directory_writer);
 				
 				// Now that we've written to the directory, we construct a reader from its owned slice, 
 				// and stream that reader into the gpak writer.
@@ -386,24 +292,12 @@ pub fn main(init: std.process.Init) !void {
 			const gpak_path = args.next() orelse return usage();
 			
 			var flags: PatchFlags = .{};
-			var header_version: HeaderVersion = .newest;
 			while(args.next()) |flag| {
 				inline for(std.meta.fields(PatchFlags)) |field| {
 					if(std.mem.eql(u8, flag, field.name)){
 						// std.log.info("{s}: Flag enabled!", .{field.name}); // sponge
 						@field(flags, field.name) = true;
 					}
-				}
-				
-				const flag_name = std.mem.sliceTo(flag, '=');
-				if(std.mem.eql(u8, flag_name, "header_version")){
-					header_version = HeaderVersion.parse(flag[flag_name.len + 1..]) catch |e| {
-						std.log.err("{t}: Failed to parse \"{s}\" as a header version!", .{
-							e, flag[flag_name.len + 1..],
-						});
-						return e;
-					};
-					break;
 				}
 			}
 			
@@ -445,7 +339,7 @@ pub fn main(init: std.process.Init) !void {
 			errdefer temp.close(io);
 			
 			// Indented so we close the temp file before we attempt to reopen it.
-			try patch(io, alc, gpak, temp, patch_dir, flags, header_version);
+			try patch(io, alc, gpak, temp, patch_dir, flags);
 			
 			temp.close(io);
 			gpak.close(io);
@@ -485,7 +379,6 @@ pub fn main(init: std.process.Init) !void {
 pub fn unpack(
 	io: std.Io, alc: std.mem.Allocator,
 	gpak: std.Io.File, output_dir: std.Io.Dir,
-	header_version: HeaderVersion,
 ) !void {
 	// Get a reader from the GPAK file.
 	var gpak_reader_buffer: [IO_BUFFER_SIZE]u8 = undefined;
@@ -493,24 +386,10 @@ pub fn unpack(
 	const reader: *std.Io.Reader = &gpak_reader.interface;
 	
 	// Begin reading the GPAK file.
-	// Assert that the header is "\H" followed by two 0 bytes.
-	const header_ascii = try reader.take(2);
-	if(!std.mem.eql(u8, header_ascii, header_version.truth())){
-		std.log.err("FATAL ERROR: Expected gpak file to start with {s}, found {s}!", .{
-			header_version.truth(),
-			header_ascii,
-		});
-		return error.GpakWrongHeader;
-	}
-	const header_padding = try reader.takeInt(u16, .little);
-	if(header_padding != 0){
-		std.log.warn("Header should have had two 0-bytes after {s}, but it didn't!", .{
-			header_version.truth(),
-		});
-	}
+	const file_num = try reader.takeInt(u32, .little);
 	
 	// Now that we've parsed the header, we can begin parsing the virtual filesystem.
-	const dictionary: Dictionary = try .read(reader, alc);
+	const dictionary: Dictionary = try .read(reader, alc, file_num);
 	defer dictionary.deinit(alc);
 	
 	// Give the user feedback that the application is actually working towards something- 
@@ -521,7 +400,7 @@ pub fn unpack(
 	defer progress.end();
 	
 	progress.setName("Extracting files");
-	progress.setEstimatedTotalItems(dictionary.entries.len);
+	progress.setEstimatedTotalItems(file_num);
 	
 	// We also make a child node, just so we can display which file is currently being extracted.
 	var progress_filename_buf: [std.Progress.Node.max_name_len]u8 = undefined;
@@ -576,7 +455,6 @@ pub fn pack(
 	temp: std.Io.File,
 	/// The writer for the directory.
 	writer: *std.Io.Writer,
-	header_version: HeaderVersion,
 ) !void {
 	// GPAK filepaths and their associated file lengths.
 	var file_paths: std.ArrayList([]const u8) = .empty;
@@ -679,8 +557,16 @@ pub fn pack(
 		try stream_reader_to_writer(reader, temp_writer, @intCast(length));
 	}
 	
-	_ = try writer.write(header_version.truth());
-	try writer.writeInt(u16, 0, .little);
+	// Write the file num at the start of the GPAK file.
+	if(file_paths.items.len > std.math.maxInt(u32)){
+		@branchHint(.unlikely);
+		std.log.err("FATAL ERROR: Directory has too many files (max {d}, found {d})", .{
+			std.math.maxInt(u32),
+			file_paths.items.len,
+		});
+		return error.TooManyFiles;
+	}
+	try writer.writeInt(u32, @intCast(file_paths.items.len), .little);
 	
 	// Loop over the file paths and lengths, writing them after the header.
 	for(file_paths.items, file_lengths.items) |filepath, file_length| {
@@ -699,7 +585,6 @@ pub fn patch(
 	temp: std.Io.File,
 	patch_dir: std.Io.Dir,
 	flags: PatchFlags,
-	header_version: HeaderVersion,
 ) !void {
 	// First of all, attempt to read the patch file as ZON.
 	const patch_file = patch_dir.openFile(io, "patch.zon", .{}) catch |e| {
@@ -771,23 +656,9 @@ pub fn patch(
 	var gpak_filereader = gpak.reader(io, &gpak_filereader_buffer);
 	const gpak_reader: *std.Io.Reader = &gpak_filereader.interface;
 	
-	// Assert that the header is "\H" followed by two 0 bytes.
-	const header_ascii = try gpak_reader.take(2);
-	if(!std.mem.eql(u8, header_ascii, header_version.truth())){
-		std.log.err("FATAL ERROR: Expected gpak file to start with {s}, found {s}!", .{
-			header_version.truth(),
-			header_ascii,
-		});
-		return error.GpakWrongHeader;
-	}
-	const header_padding = try gpak_reader.takeInt(u16, .little);
-	if(header_padding != 0){
-		std.log.warn("Header should have had two 0-bytes after {s}, but it didn't!", .{
-			header_version.truth(),
-		});
-	}
+	const gpak_file_num = try gpak_reader.takeInt(u32, .little);
 	
-	const dictionary: Dictionary = try .read(gpak_reader, alc);
+	const dictionary: Dictionary = try .read(gpak_reader, alc, gpak_file_num);
 	defer dictionary.deinit(alc);
 	
 	for(dictionary.entries) |entry| {
@@ -845,8 +716,28 @@ pub fn patch(
 	var temp_writer = temp.writer(io, &temp_writer_buffer);
 	const writer: *std.Io.Writer = &temp_writer.interface;
 	
-	_ = try writer.write(header_version.truth());
-	try writer.writeInt(u16, 0, .little);
+	// Calculate the number of files we'll expect to write.
+	// We won't be writing all original files, so we need to reference their write flag.
+	const file_num: usize = blk: {
+		var out: usize = patch_zon.override.len;
+		for(add_file_write_flags) |write| {
+			if(write) out += 1;
+		}
+		for(file_write_flags.items) |write| {
+			if(write) out += 1;
+		}
+		break :blk out;
+	};
+	
+	if(file_num > std.math.maxInt(u32)){
+		@branchHint(.unlikely);
+		std.log.err("FATAL ERROR: Patching too many files into gpak (max {d}, found {d})", .{
+			std.math.maxInt(u32),
+			file_num,
+		});
+		return error.TooManyFiles;
+	}
+	try writer.writeInt(u32, @intCast(file_num), .little);
 	
 	for(patch_zon.add, add_file_write_flags) |filepath, write| {
 		if(!write) continue;
@@ -915,19 +806,6 @@ pub fn patch(
 		.refresh_rate_ns = .fromSeconds(1 / 120), // Update at 120 FPS if possible
 	});
 	defer progress.end();
-	
-	// Calculate the number of files we'll expect to write.
-	// We won't be writing all original files, so we need to reference their write flag.
-	const file_num: usize = blk: {
-		var out: usize = patch_zon.override.len;
-		for(add_file_write_flags) |write| {
-			if(write) out += 1;
-		}
-		for(file_write_flags.items) |write| {
-			if(write) out += 1;
-		}
-		break :blk out;
-	};
 	
 	progress.setName("Writing files");
 	progress.setEstimatedTotalItems(file_num);
@@ -1079,14 +957,10 @@ pub fn diff(
 	
 	var reader: *std.Io.Reader = &first_reader.interface;
 	
-	// Unlike in other modes, it's not really an error if we get a header truth value which has a bad
-	// version here.
-	// It IS an error if we can't parse a header truth value at all, though.
-	const first_header_version: HeaderVersion = try .parse_from_truth(try reader.take(2));
-	reader.toss(2); // Skip past the two 0-bytes.
+	const first_file_num = try reader.takeInt(u32, .little);
 	
 	// Read the file dictionary.
-	const first_dictionary: Dictionary = try .read(reader, alc);
+	const first_dictionary: Dictionary = try .read(reader, alc, first_file_num);
 	defer first_dictionary.deinit(alc);
 	
 	// Give the user feedback that the application is actually working towards something- 
@@ -1097,7 +971,7 @@ pub fn diff(
 	defer progress.end();
 	
 	progress.setName("1st gpak: calculating hashes");
-	progress.setEstimatedTotalItems(first_dictionary.entries.len);
+	progress.setEstimatedTotalItems(first_file_num);
 	
 	// We also make a child node, just so we can display which file is currently being checksummed.
 	var progress_filename_buf: [std.Progress.Node.max_name_len]u8 = undefined;
@@ -1143,22 +1017,10 @@ pub fn diff(
 	defer second_file_table.deinit();
 	try second_file_table.ensureTotalCapacity(20000);
 	
-	// Unlike in other modes, it's not really an error if we get a header truth value which has a bad
-	// version here.
-	// It IS an error if we can't parse a header truth value at all, though.
-	const second_header_version: HeaderVersion = try .parse_from_truth(try reader.take(2));
-	reader.toss(2); // Skip past the two 0-bytes.
-	
-	// If the first and second header have different versions, record it in the ZON file.
-	if(first_header_version != second_header_version){
-		try zon_root.field("header_diff", .{
-			.old = first_header_version.truth(),
-			.new = second_header_version.truth(),
-		}, .{});
-	}
+	const second_file_num = try reader.takeInt(u32, .little);
 	
 	// Read the file dictionary.
-	const second_dictionary: Dictionary = try .read(reader, alc);
+	const second_dictionary: Dictionary = try .read(reader, alc, second_file_num);
 	// Save the file offset after reading the file dictionary so we can skip reading it a second time.
 	const second_data_offset: usize = second_reader.logicalPos();
 	
@@ -1168,7 +1030,7 @@ pub fn diff(
 	
 	progress.setCompletedItems(0);
 	progress.setName("2nd gpak: calculating hashes");
-	progress.setEstimatedTotalItems(second_dictionary.entries.len);
+	progress.setEstimatedTotalItems(second_file_num);
 	
 	var second_hashes: std.ArrayList(u64) = try .initCapacity(alc, 20000);
 	defer second_hashes.deinit(alc);
@@ -1253,7 +1115,7 @@ pub fn diff(
 	progress.setEstimatedTotalItems(added_files.items.len + changed_files.items.len);
 	
 	// Save the added and changed files to the output directory.
-	try second_reader.seekTo(second_data_offset);
+	try second_reader.seekTo(second_data_offset); // Skip past the dictionary.
 	write_loop: for(second_dictionary.entries) |entry| {
 		const filepath = entry.path[0..entry.path_length];
 		for(added_files.items) |add| {
@@ -1372,12 +1234,6 @@ pub fn usage() void {
 		\\OR
 		\\<diff>
 		\\  <path to first gpak> <path to second gpak> <path to output directory>
-		\\
-		\\From 21/Feb/2026, the following flag is available in all modes:
-		\\  header_version=<number>
-		\\     Specify the header version of the gpak file. 2 is the current version, 1 is the old version.
-		\\     This tool now defaults to version 2, so it won't work with old files unless you specify 
-		\\     this flag.
 		, .{
 			options.version,
 		},

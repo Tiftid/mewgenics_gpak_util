@@ -7,7 +7,7 @@ If you own [Mewgenics on Steam](https://store.steampowered.com/app/686060/Mewgen
 This kind of thing is advantageous for game development; store all your assets in one big bundle, so you only have to make one filesystem call to have access to all of them.
 
 The .gpak file format is particularly simple:
-- It begins with `H to identify its header, then two 0-bytes (possibly a file format version)
+- It begins with "u32 file_num"
 - After that, a block of "u16 string_length; (string_length)u8 string; u32 filesize" identifies each file in the pak
 - After this block finishes, the raw, uncompressed file data occupies the rest of the file
 - The file data is given in the same order as the filenames, so you don't ever need to store offsets
@@ -15,10 +15,6 @@ The .gpak file format is particularly simple:
 This makes it a relatively compact way to encode a large archive of files, and also very, very easy to pack or unpack.
 
 ## Modes (command-line interface)
-
-### Optional flags for all modes (should follow other arguments)
-- header_version=number
-  - Specifies the header version for the gpak file we're reading or writing. Files with version 1 begin with "\H", files with version 2 begin with "`H". This tool considers version 2 the default, so you'll need to specify "header_version=1" to work with old gpaks.
 
 ### unpack
 Unpack a gpak file into a directory of files.
