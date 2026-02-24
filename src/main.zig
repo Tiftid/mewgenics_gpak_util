@@ -864,6 +864,13 @@ pub fn patch(
 		
 		// Read the file and stream it to the temp file.
 		if(write){
+			// Tiftid 24/Feb/2026:
+			// If there were no add files, we're forced to pre-flush here, for the same reason that 
+			// failing to pre-flush before writing the add files causes errors.
+			if(patch_zon.add.len == 0){
+				@branchHint(.unlikely);
+				try writer.flush();
+			}
 			try stream_reader_to_writer(gpak_reader, writer, entry.file_length);
 		} else {
 			// Stream the file into a dummy writer, if we're not writing it.
@@ -1191,14 +1198,20 @@ pub fn diff(
 		try stream_reader_to_writer(reader, &dummy.writer, entry.file_length);
 	}
 	
-	try zon_root.field("added_files", added_files.items, .{});
-	try zon_writer.flush();
+	if(added_files.items.len > 0){
+		try zon_root.field("added_files", added_files.items, .{});
+		try zon_writer.flush();
+	}
 	
-	try zon_root.field("removed_files", removed_files.items, .{});
-	try zon_writer.flush();
+	if(removed_files.items.len > 0){
+		try zon_root.field("removed_files", removed_files.items, .{});
+		try zon_writer.flush();
+	}
 	
-	try zon_root.field("changed_files", changed_files.items, .{});
-	try zon_writer.flush();
+	if(changed_files.items.len > 0){
+		try zon_root.field("changed_files", changed_files.items, .{});
+		try zon_writer.flush();
+	}
 	
 	// Sadly, we can't defer this, as using try inside a defer statement is a compile-error.
 	try zon_root.end();
